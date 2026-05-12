@@ -14,7 +14,13 @@ import CountingEngine from "@/components/game/engines/CountingEngine";
 import MemoryEngine from "@/components/game/engines/MemoryEngine";
 import BuildingEngine, { getBuildTemplate } from "@/components/game/engines/BuildingEngine";
 
-const engineComponents: Record<string, ComponentType<any>> = {
+interface GameEngineProps {
+  game: GameConfig;
+  onInteraction: () => void;
+  onComplete: (score: number) => void;
+}
+
+const engineComponents: Record<string, ComponentType<GameEngineProps>> = {
   sandbox: PlaygroundEngine,
   slide: PlaygroundEngine,
   bench: PlaygroundEngine,
