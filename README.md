@@ -46,7 +46,7 @@ Validation to date is technical and workflow-focused:
 - Backend API tests cover login, invalid credentials, role restrictions, child creation, result recording, and audit event creation.
 - Backend type-checking covers the Postgres API foundation.
 - Build verification is run with `npm run build` using Vite.
-- Production dependency audit currently reports zero vulnerabilities with `npm audit --omit=dev`.
+- The latest verification run on 2026-05-12 passed `npm test` with 231 tests, `npm run typecheck:server`, `npm run build`, `npm run lint` with 0 errors and 0 warnings, and `npm audit --omit=dev` with 0 production dependency vulnerabilities.
 
 No clinical efficacy claims should be made until a documented pilot is completed. A pilot with security/privacy review, consent materials, deployment logging, and pre-defined outcome measures remains the next evidence step.
 
@@ -60,9 +60,19 @@ Draft review artifacts are included:
 - `docs/data-governance-policy.md`
 - `docs/pilot-validation-protocol.md`
 - `docs/grant-technical-appendix.md`
+- `docs/reviewer-response.md`
+- `docs/security-review-evidence-register.md`
+- `docs/hipaa-dpia-risk-assessment.md`
+- `docs/penetration-test-plan.md`
+- `docs/pilot-evidence-template.md`
+- `docs/backup-restore-disaster-recovery-procedure.md`
+- `docs/incident-response-policy.md`
+- `docs/access-review-least-privilege-procedure.md`
+- `docs/data-retention-deletion-export-policy.md`
+- `docs/consent-and-pilot-approval-procedure.md`
 - `docs/production-readiness.md`
 
-The platform has not yet completed an independent security audit, HIPAA risk analysis, DPIA, penetration test, or formal data protection review. Those reviews should be completed before live clinical deployment with real PHI/PII.
+The platform now includes prepared review work products for an independent security audit, HIPAA/DPIA assessment, penetration test, and pilot evidence capture. Those external reviews have not yet been independently executed or signed off, and should be completed before live clinical deployment with real PHI/PII.
 
 ## Grant/Reviewer Note
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ClinicalRatings, SkillDomain, useApp } from "@/context/AppContext";
 import { getGameById } from "@/data/games";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, LineChart, Line, Legend } from "recharts";
@@ -30,7 +30,7 @@ export default function HomeworkReview() {
   const [reviewMode, setReviewMode] = useState<"quick" | "detailed">("quick");
   const [generating, setGenerating] = useState(false);
 
-  const getChild = (id: string) => children.find((entry) => entry.id === id);
+  const getChild = useCallback((id: string) => children.find((entry) => entry.id === id), [children]);
   const selectedChildren = useMemo(
     () => selectedChildId === "all" ? children : children.filter((child) => child.id === selectedChildId),
     [children, selectedChildId]
@@ -165,7 +165,7 @@ export default function HomeworkReview() {
           child: getChild(assignment.childId),
           review: analyzeMonthlyPlanWeekOutcome(assignment),
         })),
-    [filteredAssignments]
+    [filteredAssignments, getChild]
   );
 
   const handleGeneratePDF = async () => {

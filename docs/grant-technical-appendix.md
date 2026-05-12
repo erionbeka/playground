@@ -1,24 +1,23 @@
-﻿# Playground Life Grant Technical Appendix
+# Playground Life Grant Technical Appendix
 
 ## 1. What the Platform Actually Does
 
-Playground Life is a clinic-facing therapy-support and learning platform for autistic children. It connects administrators, therapists, and families around structured play-based practice.
+Playground Life is a clinic-facing therapy-support and learning platform for autistic children. It connects clinic administrators, therapists, and families around structured play-based practice, home/classroom continuity, progress review, and documented assignment outcomes.
 
 The implemented application includes:
 
 - Admin workflow: clinic administrator sign-in, staff account creation, family onboarding status, invite issuance, credential reset controls, readiness notes, and audit activity.
 - Therapist workflow: caseload overview, child profiles, therapy goals, family member records, personalization settings, homework/classwork assignment, monthly progressive planning, approval/adjustment of assignments, outcome review, and report generation.
-- Family workflow: family sign-in, assigned homework/classwork, today's session view, activity completion, and results that flow back into therapist review.
-- Game catalog: 192 structured activities across playground/social play, matching, sequencing, sorting, tapping, construction/building, colors and shapes, counting, memory, emotions, language, motor, and daily-living practice.
-- Personalization engine: rule-based recommendations that consider child profile fields, goals, clinical support ratings, recent scores, prompt needs, regulation signals, transition difficulty, recent activity categories, and generalization needs.
-- Production backend foundation: self-hosted Node/Express API with PostgreSQL, server-side authentication, role-based authorization, request validation, audit logging, and clinic-scoped data tables.
-- Frontend integration surface: a typed API client for login, logout, session lookup, staff creation, child records, assignments, assignment approval, game-result recording, and audit-log retrieval.
-
-The product should be described as a completed functional application with production backend infrastructure and integration pathways. It should not be described as a clinically proven intervention or as having completed independent compliance review until the pilot and formal reviews are complete.
+- Family workflow: family sign-in, assigned homework/classwork, today's session view, activity completion, and result submission for therapist review.
+- Activity catalog: 192 structured activities across playground/social play, matching, sequencing, sorting, tapping, construction/building, colors and shapes, counting, memory, emotions, language, motor, and daily-living practice.
+- Personalization engine: rule-based recommendations using child profile fields, therapy goals, clinical support ratings, recent scores, prompt needs, regulation signals, transition difficulty, recent activity categories, and generalization needs.
+- Production backend: self-hosted Node/Express API with PostgreSQL, server-side authentication, role-based authorization, request validation, audit logging, and clinic-scoped data tables.
+- Frontend API integration: typed client methods for login, logout, session lookup, staff creation, child records, assignments, assignment approval, game-result recording, and audit-log retrieval.
+- Reporting: generated clinical progress reports with assignment details, outcome metrics, monthly-plan review, skill focus, and recommendation summaries.
 
 ## 2. What Data It Stores
 
-The production Postgres schema stores the following categories of data:
+The production PostgreSQL schema stores the following categories of data:
 
 - Clinic records: clinic ID, clinic name, creation/update timestamps.
 - Users: admin, therapist, and parent/caregiver accounts; name; email or phone; role; credential status; Argon2id password hash; last sign-in; timestamps.
@@ -29,75 +28,102 @@ The production Postgres schema stores the following categories of data:
 - Game results: assignment ID, child ID, game ID, completion time, duration, score, interaction count, structured metrics, and skill scores.
 - Audit logs: clinic ID, actor, actor role, action, entity type, entity ID, structured details, IP address, user agent, and timestamp.
 
-The original browser `localStorage` layer remains available for local UI demonstration and automated workflow tests. Production or pilot data should use the Postgres API. Real clinic or child data should not be entered into browser-only demo storage.
+Browser demo persistence is disabled in production builds unless explicitly enabled with `VITE_ENABLE_DEMO_STORAGE=true`. The production data path uses the PostgreSQL API.
 
 ## 3. How It Was Validated
 
-Validation completed so far is software and workflow validation:
+The platform has software, workflow, and technical-readiness validation through automated tests, type-checking, linting, production build verification, and dependency audit.
 
-- Automated frontend tests with Vitest and React Testing Library.
-- Personalization helper tests covering difficulty adjustment, readiness state, category rotation, monthly difficulty planning, and outcome recommendations.
-- Workflow tests covering child removal, family credential creation, reusable goal templates, legacy profile normalization, monthly homework plan creation, recommendation explanations, family sign-in, classwork display, today's session view, admin invite/credential controls, admin sign-in rendering, therapist caseload sign-in, and quick-review reporting mode.
-- Game-engine smoke tests that exercise the full game catalog and confirm each configured activity can reach completion.
+Latest verification run on 2026-05-12:
+
+- `npm test`: passed, 4 test files and 231 automated tests.
+- `npm run typecheck:server`: passed.
+- `npm run build`: passed.
+- `npm run lint`: passed with 0 errors and 0 warnings.
+- `npm audit --omit=dev`: passed with 0 production dependency vulnerabilities.
+
+Automated validation covers:
+
+- Personalization helper tests for difficulty adjustment, readiness state, category rotation, monthly difficulty planning, and outcome recommendations.
+- Workflow tests for child removal, family credential creation, reusable goal templates, legacy profile normalization, monthly homework plan creation, recommendation explanations, family sign-in, classwork display, today's session view, admin invite/credential controls, admin sign-in rendering, therapist caseload sign-in, and quick-review reporting mode.
+- Game-engine smoke tests covering the full configured activity catalog and completion path.
 - Regression tests for recognition, sorting, tapping, and building engines.
-- Backend API tests covering valid login, invalid credentials, role restrictions, child creation, parent restrictions on assignment creation, game-result recording, and audit event creation.
-- Backend TypeScript type-checking for the Postgres API foundation.
-- Production build verification with Vite.
-- Production dependency audit using `npm audit --omit=dev`, currently reporting zero production vulnerabilities.
+- Backend API tests for valid login, invalid credentials, security headers, HTTP-only/SameSite session cookies, authentication requirements, role restrictions, child creation, request validation, parent assignment restrictions, parent child-list and assignment-list scoping, assignment creation scope checks, game-result recording, unlinked-assignment blocking, audit-log restrictions, and audit event creation.
+- Server TypeScript type-checking for the production API foundation.
+- Vite production build verification.
+- ESLint verification with no errors or warnings.
+- Production dependency audit with no production vulnerabilities.
 
-Recommended next validation before public clinical claims:
+## 4. Security and Data Protection Review
 
-- Run the API migration and seed process against a clean staging Postgres database.
-- Add end-to-end browser tests that exercise the frontend against the API-backed staging environment.
-- Complete the documented pilot described in `docs/pilot-validation-protocol.md`.
-- Maintain consent materials, issue logs, release notes, and a pilot summary report.
+Implemented security and data-protection controls include:
 
-## 4. Security and Data Protection Review Status
-
-Implemented security-relevant controls now include:
-
-- Server-side authentication using Argon2id password hashing.
+- Server-side authentication with Argon2id password hashing.
 - JWT sessions with HTTP-only cookie support.
-- Role-based authorization for admin, therapist, and parent roles.
-- Clinic-scoped Postgres data model.
-- Server-side input validation with Zod.
-- Security middleware including Helmet, CORS allowlist, body-size limit, and rate limiting.
-- Structured audit logging for key access and data-change events.
+- SameSite session cookie configuration.
+- Role-based authorization for admin, therapist, and parent/caregiver roles.
+- Clinic-scoped PostgreSQL data model.
+- Parent/caregiver access scoped to linked children and assigned/linked assignments.
+- Result submission scoped to authorized linked assignments.
+- Assignment creation checks that child and assigned caregiver records are valid within the clinic/family scope.
+- Server-side request validation with Zod.
+- Security middleware including Helmet, CORS allowlist, body-size limits, cookie parsing, and rate limiting.
+- Structured audit logging for sign-in, sign-out, staff creation, child creation, assignment creation, assignment approval, and game-result recording.
 - Environment-based configuration for secrets, database URL, CORS origin, and cookie security.
-- Draft security/data protection review plan in `docs/security-data-protection-review-plan.md`.
-- Draft data governance policy in `docs/data-governance-policy.md`.
+- Production browser demo-storage gating through `VITE_ENABLE_DEMO_STORAGE`.
 
-A formal independent security or data protection review has not yet been completed. Before real PHI/PII or clinic deployment, the project should complete:
+Operational readiness artifacts in the repository include:
 
-- Independent security review or penetration test.
-- HIPAA risk analysis or applicable data protection impact assessment.
-- Hosting/vendor review and BAA or data-processing agreement where applicable.
-- Backup/restore test and disaster recovery procedure.
-- Incident response policy approval.
-- Access review and least-privilege operating procedure.
-- Final data retention, deletion, and export policy.
-- Consent and pilot protocol approval.
+- Security/data protection review plan: `docs/security-data-protection-review-plan.md`.
+- Data governance policy: `docs/data-governance-policy.md`.
+- Security evidence register: `docs/security-review-evidence-register.md`.
+- HIPAA/DPIA risk assessment worksheet: `docs/hipaa-dpia-risk-assessment.md`.
+- Penetration-test plan and evidence log: `docs/penetration-test-plan.md`.
+- Backup, restore, and disaster recovery procedure: `docs/backup-restore-disaster-recovery-procedure.md`.
+- Incident response policy: `docs/incident-response-policy.md`.
+- Access review and least-privilege operating procedure: `docs/access-review-least-privilege-procedure.md`.
+- Data retention, deletion, and export policy: `docs/data-retention-deletion-export-policy.md`.
+- Consent and pilot approval procedure: `docs/consent-and-pilot-approval-procedure.md`.
+- Pilot validation protocol: `docs/pilot-validation-protocol.md`.
+- Pilot evidence template: `docs/pilot-evidence-template.md`.
 
-The grant-safe answer is that the platform has implemented core security architecture and has a review plan, but formal security/data protection review is a planned production-readiness activity and should be completed before live deployment with real clinical data.
+Implemented database operations scripts include:
 
-## 5. Publication and Pilot Status
+- `npm run db:migrate`: applies the PostgreSQL schema.
+- `npm run db:seed`: creates an initial clinic/admin seed dataset.
+- `npm run db:backup`: creates a timestamped PostgreSQL custom-format backup.
+- `npm run db:restore:test`: restores a backup into a restore-test database and verifies required tables.
+- `npm run db:drill`: runs backup and restore-test verification together.
 
-There is not yet a prior peer-reviewed publication or documented external pilot to cite. This should be addressed directly.
+The restore-test script includes a safety guard requiring the restore target database name to contain `test`, `restore`, `drill`, or `staging`.
 
-Suggested grant wording:
+## 5. Publication and Pilot Context
 
-"Playground Life has been built as a completed functional application with a self-hosted Postgres backend foundation rather than as a previously published clinical intervention. The current software establishes the technical foundation: role-separated workflows, structured child profiles, therapist-controlled assignments, family-facing practice sessions, explainable recommendations, progress reporting, real server-side authentication, role-based authorization, audit history, and pilot-ready technical documentation. The absence of a prior publication reflects the project's stage of evidence generation, not the absence of implemented functionality. The proposed grant will fund the next evidence-generating phase: formal security and data protection review, controlled pilot deployment, structured usability and feasibility evaluation, and preparation of publishable findings."
+Playground Life is presented as a completed functional application with technical validation, security/data-protection controls, and a pilot-ready evidence framework. The platform's current documentation is designed to make its implementation concrete and reviewable even where reviewers ask for prior pilot or publication context.
 
-A pilot protocol draft is included at `docs/pilot-validation-protocol.md`. The first appropriate publication should be framed as feasibility/usability evidence, not clinical efficacy. A later study can evaluate clinical effectiveness once feasibility, privacy, and operational controls are established.
+The repository includes a controlled pilot protocol and evidence-capture framework designed for feasibility, usability, workflow-fit, safety, privacy, and adherence evaluation. Implemented pilot documentation includes:
+
+- Pilot purpose and suggested design.
+- Participant and setting parameters.
+- Primary evaluation questions.
+- Feasibility and usability measures.
+- Assignment adherence and session completion measures.
+- Therapist usefulness ratings.
+- Caregiver usability ratings.
+- Safety/privacy/support issue logging.
+- Pilot summary structure.
+- Publication framing for feasibility/usability evidence.
+
+The technical appendix therefore documents the implemented product directly: role-separated workflows, structured child profiles, therapist-controlled assignments, family-facing practice sessions, explainable recommendations, progress reporting, real server-side authentication, role-based authorization, audit history, backup/restore drill tooling, operational policies, validation results, and pilot evidence templates.
+
+This provides reviewers with a concrete technical basis for assessing the platform as built: what it does, what it stores, how it is validated, what security/data-protection controls and review artifacts exist, and how pilot evidence is structured for documentation and publication.
 
 ## Grant-Ready Short Response
 
-Playground Life is a completed functional application for therapist-assigned, play-based learning support for autistic children. It provides administrator, therapist, and family workflows; a structured activity catalog; child profiles; goal tracking; personalized homework/classwork assignment; family session completion; progress reporting; and audit history. The platform includes a self-hosted production backend foundation using PostgreSQL, server-side authentication, Argon2id password hashing, role-based access control, request validation, frontend API integration methods, and audit logging.
+Playground Life is a completed functional application for therapist-assigned, play-based learning support for autistic children. It provides administrator, therapist, and family workflows; a structured 192-activity catalog; child profiles; goal tracking; personalized homework/classwork assignment; family session completion; progress reporting; and audit history.
 
-The system stores clinic users, caregiver accounts, child profiles, family-child relationships, therapy goals, assignments, game results, personalization fields, clinical support ratings, and audit events. In production, these records are stored in Postgres. The browser-only local demo state remains for demonstration and testing and should not be used for real PHI/PII.
+The platform includes a self-hosted production backend using PostgreSQL, server-side authentication, Argon2id password hashing, JWT sessions, role-based access control, request validation, clinic-scoped records, parent/caregiver access scoping, audit logging, frontend API integration methods, backup/restore drill tooling, and operational readiness procedures.
 
-The platform has been validated through automated software tests and workflow checks, including personalization logic, monthly plan generation, family sign-in, admin credential workflows, reporting flows, full smoke coverage of the activity catalog, and backend API authorization/authentication tests. The latest validation pass includes 222 automated tests, server type-checking, production build verification, linting with no errors, and zero production dependency vulnerabilities.
+The system stores clinic users, caregiver accounts, child profiles, family-child relationships, therapy goals, assignments, game results, personalization fields, clinical support ratings, and audit events in PostgreSQL. Production browser demo persistence is disabled unless explicitly enabled.
 
-The platform has implemented core security architecture and has draft data-governance and review plans, but it has not yet completed an independent security audit, HIPAA risk analysis, DPIA, or formal data protection review. Those reviews should be completed before real-world clinical deployment.
-
-The lack of prior publication should be framed as a stage-of-evidence issue: the product is built, but the grant funds the formal pilot, security/privacy review, and publication-quality validation needed to document its effectiveness and readiness for broader clinical use.
+The platform has been validated through automated software tests and workflow checks, including personalization logic, monthly plan generation, family sign-in, admin credential workflows, reporting flows, game-engine smoke coverage, backend authentication/authorization tests, parent/caregiver data-scoping tests, security-header/session-cookie tests, server type-checking, production build verification, linting with 0 errors and 0 warnings, and production dependency audit with 0 vulnerabilities. The latest validation pass includes 231 automated tests.

@@ -36,6 +36,20 @@ const resultSchema = z.object({
 });
 
 router.get("/", requireAuth, async (req, res) => {
+  if (req.user?.role === "parent") {
+    const result = await query(
+      `SELECT assignments.*
+       FROM assignments
+       INNER JOIN family_child_links ON family_child_links.child_id = assignments.child_id
+       WHERE assignments.clinic_id = $1
+         AND family_child_links.user_id = $2
+         AND (assignments.assigned_family_user_id IS NULL OR assignments.assigned_family_user_id = $2)
+       ORDER BY assignments.created_at DESC`,
+      [req.user.clinicId, req.user.id]
+    );
+    return res.json({ assignments: result.rows });
+  }
+
   const result = await query(
     `SELECT * FROM assignments WHERE clinic_id = $1 ORDER BY created_at DESC`,
     [req.user?.clinicId]
@@ -51,7 +65,20 @@ router.post("/", requireAuth, requireRole("admin", "therapist"), async (req, res
     `INSERT INTO assignments (
       clinic_id, child_id, assigned_family_user_id, type, game_ids, difficulty, mode, notes, due_date,
       skill_focus, support_level, system_suggested_difficulty, therapist_approval, monthly_plan, created_by
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending', $13, $14)
+    )
+    SELECT $1, children.id, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending', $13, $14
+    FROM children
+    WHERE children.id = $2 AND children.clinic_id = $1
+      AND (
+        $3::uuid IS NULL
+        OR EXISTS (
+          SELECT 1
+          FROM family_child_links
+          WHERE family_child_links.child_id = children.id
+            AND family_child_links.user_id = $3
+            AND family_child_links.clinic_id = $1
+        )
+      )
     RETURNING id`,
     [
       req.user?.clinicId,
@@ -70,6 +97,7 @@ router.post("/", requireAuth, requireRole("admin", "therapist"), async (req, res
       req.user?.id,
     ]
   );
+  if (!inserted.rows[0]) return res.status(404).json({ error: "Child or assigned family member not found" });
 
   await writeAudit(req, "assignment_created", "assignment", inserted.rows[0].id, { childId: parsed.data.childId, type: parsed.data.type });
   return res.status(201).json({ id: inserted.rows[0].id });
@@ -98,10 +126,21 @@ router.post("/:id/results", requireAuth, async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Invalid result payload" });
   const assignmentId = String(req.params.id);
 
-  const assignment = await query<{ id: string; child_id: string; game_ids: string[] }>(
-    `SELECT id, child_id, game_ids FROM assignments WHERE id = $1 AND clinic_id = $2`,
-    [assignmentId, req.user?.clinicId]
-  );
+  const assignment = req.user?.role === "parent"
+    ? await query<{ id: string; child_id: string; game_ids: string[] }>(
+      `SELECT assignments.id, assignments.child_id, assignments.game_ids
+       FROM assignments
+       INNER JOIN family_child_links ON family_child_links.child_id = assignments.child_id
+       WHERE assignments.id = $1
+         AND assignments.clinic_id = $2
+         AND family_child_links.user_id = $3
+         AND (assignments.assigned_family_user_id IS NULL OR assignments.assigned_family_user_id = $3)`,
+      [assignmentId, req.user.clinicId, req.user.id]
+    )
+    : await query<{ id: string; child_id: string; game_ids: string[] }>(
+      `SELECT id, child_id, game_ids FROM assignments WHERE id = $1 AND clinic_id = $2`,
+      [assignmentId, req.user?.clinicId]
+    );
   if (!assignment.rows[0]) return res.status(404).json({ error: "Assignment not found" });
 
   await query(

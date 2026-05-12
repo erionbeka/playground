@@ -19,6 +19,18 @@ const childSchema = z.object({
 });
 
 router.get("/", requireAuth, async (req, res) => {
+  if (req.user?.role === "parent") {
+    const result = await query(
+      `SELECT children.id, children.first_name, children.display_name, children.avatar, children.birth_date, children.diagnosis, children.notes, children.personalization_profile, children.skill_profile, children.progression_settings, children.created_at, children.updated_at
+       FROM children
+       INNER JOIN family_child_links ON family_child_links.child_id = children.id
+       WHERE children.clinic_id = $1 AND family_child_links.user_id = $2
+       ORDER BY children.created_at DESC`,
+      [req.user.clinicId, req.user.id]
+    );
+    return res.json({ children: result.rows });
+  }
+
   const result = await query(
     `SELECT id, first_name, display_name, avatar, birth_date, diagnosis, notes, personalization_profile, skill_profile, progression_settings, created_at, updated_at
      FROM children

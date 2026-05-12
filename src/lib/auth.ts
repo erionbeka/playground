@@ -8,6 +8,10 @@ export interface AuthSession {
 
 const SESSION_STORAGE_KEY = "playground-life.session.v1";
 
+function isDemoSessionStorageEnabled() {
+  return import.meta.env.DEV || import.meta.env.MODE === "test" || import.meta.env.VITE_ENABLE_DEMO_STORAGE === "true";
+}
+
 export function hashSecret(value: string) {
   let hash = 2166136261;
 
@@ -25,6 +29,7 @@ export function verifySecret(hash: string, value: string) {
 
 export function loadSession(): AuthSession | null {
   if (typeof window === "undefined") return null;
+  if (!isDemoSessionStorageEnabled()) return null;
 
   try {
     const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
@@ -36,6 +41,7 @@ export function loadSession(): AuthSession | null {
 
 export function saveSession(session: AuthSession | null) {
   if (typeof window === "undefined") return;
+  if (!isDemoSessionStorageEnabled()) return;
 
   if (!session) {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);

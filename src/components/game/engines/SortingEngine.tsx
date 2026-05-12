@@ -55,7 +55,7 @@ function createItems(normalizedCategories: string[], perCategory: number) {
 }
 
 export default function SortingEngine({ game, onInteraction, onComplete }: Props) {
-  const categories = (game.config.categories as string[] | undefined) || ["Group A", "Group B"];
+  const categories = useMemo(() => (game.config.categories as string[] | undefined) || ["Group A", "Group B"], [game.config.categories]);
   const { supportLevel, readinessStage, personalized } = getAdaptiveGameConfig(game);
   const normalized = useMemo(() => categories.map(normalizeCategory), [categories]);
   const categoriesKey = normalized.join("|");

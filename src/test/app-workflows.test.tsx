@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -554,12 +554,15 @@ describe("app workflows", () => {
   it("lets admins issue invites and reset family credentials", () => {
     function AdminProbe() {
       const { signInAdmin, issueFamilyInvite, resetFamilyCredentials, children, session } = useApp();
+      const didRun = useRef(false);
 
       useEffect(() => {
+        if (didRun.current) return;
+        didRun.current = true;
         signInAdmin("admin@playgroundlife.app", "admin123");
         issueFamilyInvite("child-1", "fm-1");
         resetFamilyCredentials("child-1", "fm-1", "Reset123", true);
-      }, []);
+      }, [issueFamilyInvite, resetFamilyCredentials, signInAdmin]);
 
       return <pre data-testid="admin-probe">{JSON.stringify({ session, children })}</pre>;
     }

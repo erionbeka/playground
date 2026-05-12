@@ -12,7 +12,7 @@ This document defines the review package required before Playground Life is depl
 - Helmet security headers, CORS allowlist, JSON body size limits, and API rate limiting.
 - Audit logging for sign-in, sign-out, staff creation, child creation, assignment creation, approval, and result recording.
 - Environment-based secret management through `.env`.
-- Production dependency audit currently reports zero production vulnerabilities with `npm audit --omit=dev`.
+- Production dependency audit reports 0 production dependency vulnerabilities with `npm audit --omit=dev` as of the 2026-05-12 verification run.
 
 ## Review Required Before Live Clinical Data
 
@@ -35,6 +35,14 @@ This document defines the review package required before Playground Life is depl
 - Findings list with severity and remediation owner.
 - Remediation evidence.
 - Final go/no-go decision for pilot deployment.
+
+## Implemented Review Package
+
+- `docs/security-review-evidence-register.md`
+- `docs/hipaa-dpia-risk-assessment.md`
+- `docs/penetration-test-plan.md`
+- `docs/pilot-evidence-template.md`
+- Expanded API security regression coverage in `server/server.test.ts`
 
 ## Grant-Safe Status Statement
 

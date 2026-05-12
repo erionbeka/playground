@@ -50,7 +50,12 @@ The production schema stores:
 - API TypeScript type-checking runs with `npm run typecheck:server`.
 - Production build runs with `npm run build`.
 - Linting runs with `npm run lint`.
-- Production dependency audit runs with `npm audit --omit=dev` and currently reports zero vulnerabilities.
+- Latest verification run on 2026-05-12:
+  - `npm test`: passed, 4 test files and 231 automated tests.
+  - `npm run typecheck:server`: passed.
+  - `npm run build`: passed.
+  - `npm run lint`: passed with 0 errors and 0 warnings.
+  - `npm audit --omit=dev`: passed with 0 production dependency vulnerabilities.
 
 ## Security and Data Protection Review Status
 
@@ -59,6 +64,15 @@ Implemented technical controls are not the same as a completed independent revie
 - `docs/security-data-protection-review-plan.md`
 - `docs/data-governance-policy.md`
 - `docs/pilot-validation-protocol.md`
+- `docs/security-review-evidence-register.md`
+- `docs/hipaa-dpia-risk-assessment.md`
+- `docs/penetration-test-plan.md`
+- `docs/pilot-evidence-template.md`
+- `docs/backup-restore-disaster-recovery-procedure.md`
+- `docs/incident-response-policy.md`
+- `docs/access-review-least-privilege-procedure.md`
+- `docs/data-retention-deletion-export-policy.md`
+- `docs/consent-and-pilot-approval-procedure.md`
 
 The following must still be completed before real PHI/PII is entered:
 

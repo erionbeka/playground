@@ -27,8 +27,13 @@ export interface AppDataSnapshot {
 
 const APP_DATA_STORAGE_KEY = "playground-life.backend.v2";
 
+function isDemoStorageEnabled() {
+  return import.meta.env.DEV || import.meta.env.MODE === "test" || import.meta.env.VITE_ENABLE_DEMO_STORAGE === "true";
+}
+
 export function loadAppData(defaultData: AppDataSnapshot): AppDataSnapshot {
   if (typeof window === "undefined") return defaultData;
+  if (!isDemoStorageEnabled()) return defaultData;
 
   try {
     const raw = window.localStorage.getItem(APP_DATA_STORAGE_KEY);
@@ -41,6 +46,7 @@ export function loadAppData(defaultData: AppDataSnapshot): AppDataSnapshot {
 
 export function saveAppData(snapshot: AppDataSnapshot) {
   if (typeof window === "undefined") return;
+  if (!isDemoStorageEnabled()) return;
   window.localStorage.setItem(APP_DATA_STORAGE_KEY, JSON.stringify(snapshot));
 }
 

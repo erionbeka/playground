@@ -44,6 +44,10 @@ Evaluate the feasibility, usability, safety, and workflow fit of Playground Life
 
 The first publication should be framed as feasibility/usability evidence, not clinical efficacy. A later study can evaluate outcome effectiveness once feasibility, privacy, and operational controls are established.
 
+## Evidence Capture
+
+Use `docs/pilot-evidence-template.md` to record pilot identity, approvals, participant counts, outcome measures, issue logs, and the pilot summary. The pilot should not be described as documented or complete until that evidence package contains real approved pilot data and a signed pilot summary.
+
 ## Grant-Safe Status Statement
 
 The absence of a prior publication reflects the stage of evidence generation. The platform is built; the proposed pilot is the mechanism for producing documented, publishable evidence.

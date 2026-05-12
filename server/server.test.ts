@@ -55,7 +55,24 @@ describe("production API", () => {
 
     expect(response.body.user).toMatchObject({ id: "user-1", clinicId: "clinic-1", role: "therapist" });
     expect(response.body.token).toBe("signed-test-token");
+    expect(response.headers["set-cookie"]?.[0]).toContain("HttpOnly");
+    expect(response.headers["set-cookie"]?.[0]).toContain("SameSite=Lax");
     expect(writeAuditMock).toHaveBeenCalledWith(expect.anything(), "therapist_sign_in", "auth", "user-1", { method: "password" });
+  });
+
+  it("sends baseline API security headers", async () => {
+    const app = await loadApp();
+    const response = await request(app).get("/health").expect(200);
+
+    expect(response.headers["x-powered-by"]).toBeUndefined();
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["x-frame-options"]).toBe("SAMEORIGIN");
+    expect(response.headers["referrer-policy"]).toBeDefined();
+  });
+
+  it("requires authentication for session lookup", async () => {
+    const app = await loadApp();
+    await request(app).get("/api/auth/me").expect(401);
   });
 
   it("rejects invalid credentials", async () => {
@@ -92,6 +109,31 @@ describe("production API", () => {
     expect(writeAuditMock).toHaveBeenCalledWith(expect.anything(), "child_created", "child", "child-1", { displayName: "Ava" });
   });
 
+  it("limits parent child lists to linked children", async () => {
+    queryMock.mockResolvedValueOnce({ rows: [{ id: "child-1", display_name: "Ava" }] });
+
+    const app = await loadApp();
+    const response = await request(app)
+      .get("/api/children")
+      .set("Authorization", "Bearer parent-token")
+      .expect(200);
+
+    expect(response.body.children).toHaveLength(1);
+    expect(queryMock).toHaveBeenCalledWith(expect.stringContaining("family_child_links.user_id = $2"), ["clinic-1", "user-parent"]);
+  });
+
+  it("rejects invalid child payloads before writing data", async () => {
+    const app = await loadApp();
+    await request(app)
+      .post("/api/children")
+      .set("Authorization", "Bearer admin-token")
+      .send({ firstName: "", displayName: "" })
+      .expect(400);
+
+    expect(queryMock).not.toHaveBeenCalled();
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
   it("blocks parents from creating assignments", async () => {
     const app = await loadApp();
     await request(app)
@@ -99,6 +141,40 @@ describe("production API", () => {
       .set("Authorization", "Bearer parent-token")
       .send({ childId: "00000000-0000-0000-0000-000000000001", type: "homework", gameIds: ["game-001"], difficulty: "easy", mode: "shared", dueDate: "2026-06-01" })
       .expect(403);
+  });
+
+  it("does not create assignments for children or caregivers outside the caller clinic scope", async () => {
+    queryMock.mockResolvedValueOnce({ rows: [] });
+
+    const app = await loadApp();
+    await request(app)
+      .post("/api/assignments")
+      .set("Authorization", "Bearer admin-token")
+      .send({
+        childId: "00000000-0000-0000-0000-000000000001",
+        assignedFamilyUserId: "00000000-0000-0000-0000-000000000003",
+        type: "homework",
+        gameIds: ["game-001"],
+        difficulty: "easy",
+        mode: "shared",
+        dueDate: "2026-06-01",
+      })
+      .expect(404);
+
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("limits parent assignment lists to linked and assigned records", async () => {
+    queryMock.mockResolvedValueOnce({ rows: [{ id: "assignment-1", child_id: "child-1" }] });
+
+    const app = await loadApp();
+    const response = await request(app)
+      .get("/api/assignments")
+      .set("Authorization", "Bearer parent-token")
+      .expect(200);
+
+    expect(response.body.assignments).toHaveLength(1);
+    expect(queryMock).toHaveBeenCalledWith(expect.stringContaining("assigned_family_user_id IS NULL OR assignments.assigned_family_user_id = $2"), ["clinic-1", "user-parent"]);
   });
 
   it("records game results and updates assignment status", async () => {
@@ -116,5 +192,52 @@ describe("production API", () => {
 
     expect(response.body.gameId).toBe("game-001");
     expect(writeAuditMock).toHaveBeenCalledWith(expect.anything(), "game_result_recorded", "result", "00000000-0000-0000-0000-000000000002", { gameId: "game-001", score: 88 });
+  });
+
+  it("blocks parent result recording for unlinked assignments", async () => {
+    queryMock.mockResolvedValueOnce({ rows: [] });
+
+    const app = await loadApp();
+    await request(app)
+      .post("/api/assignments/00000000-0000-0000-0000-000000000002/results")
+      .set("Authorization", "Bearer parent-token")
+      .send({ gameId: "game-001", durationSeconds: 120, score: 88, interactions: 12 })
+      .expect(404);
+
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks parent access to audit logs", async () => {
+    const app = await loadApp();
+    await request(app)
+      .get("/api/audit")
+      .set("Authorization", "Bearer parent-token")
+      .expect(403);
+  });
+
+  it("returns clinic-scoped audit logs for staff roles", async () => {
+    queryMock.mockResolvedValueOnce({
+      rows: [
+        {
+          id: "audit-1",
+          actor_user_id: "user-therapist",
+          actor_role: "therapist",
+          action: "child_created",
+          entity_type: "child",
+          entity_id: "child-1",
+          details: {},
+          created_at: "2026-05-12T12:00:00Z",
+        },
+      ],
+    });
+
+    const app = await loadApp();
+    const response = await request(app)
+      .get("/api/audit")
+      .set("Authorization", "Bearer therapist-token")
+      .expect(200);
+
+    expect(response.body.auditLog).toHaveLength(1);
+    expect(queryMock).toHaveBeenCalledWith(expect.stringContaining("WHERE clinic_id = $1"), ["clinic-1"]);
   });
 });
