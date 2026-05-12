@@ -1,6 +1,6 @@
 ﻿# Playground Life
 
-Playground Life is a clinic-ready application for assigning, playing, and reviewing structured learning activities for autistic children. It supports separate admin, therapist, and family workflows and now includes a self-hosted Postgres production backend foundation.
+Playground Life is a clinic-ready application for assigning, playing, and reviewing structured learning activities for autistic children. It supports separate admin, therapist, and family workflows and includes a self-hosted Postgres production backend foundation.
 
 ## What the App Does
 
@@ -9,7 +9,7 @@ Playground Life is a clinic-ready application for assigning, playing, and review
 - Lets families sign in, view today's session, complete assigned games, and generate play results that flow back into therapist review.
 - Provides a catalog of 192 structured activities across matching, sequencing, sorting, tapping, social practice, building, color/shape recognition, counting, memory, emotion, language, motor, and daily-living domains.
 - Uses explainable personalization logic to recommend difficulty, support level, activity categories, monthly plans, and progression decisions.
-- Adds a Node/Express API with PostgreSQL, Argon2id password hashing, JWT sessions, role-based authorization, request validation, and audit logging.
+- Adds a Node/Express API with PostgreSQL, Argon2id password hashing, JWT sessions, role-based authorization, request validation, audit logging, and a typed frontend API client.
 
 ## Production Backend
 
@@ -29,20 +29,24 @@ Key scripts:
 - `npm run db:migrate`: create/update the Postgres schema.
 - `npm run db:seed`: create an initial clinic admin account.
 - `npm run typecheck:server`: type-check backend code.
+- `npm test`: run frontend and backend tests.
+- `npm audit --omit=dev`: check production dependency vulnerabilities.
 
 ## Data Stored
 
 The Postgres schema stores clinics, admin/therapist/parent users, child profiles, family-child links, therapy goals, assignments, game results, and audit logs. Passwords are stored as Argon2id hashes. Audit logs include actor, action, entity, timestamp, IP address, user agent, and structured details.
 
-The browser `localStorage` demo state remains available for local UI demonstration only. Real clinic or child data should use the Postgres backend, not browser demo storage.
+The browser `localStorage` demo state remains available for local UI demonstration and workflow tests only. Real clinic or child data should use the Postgres backend, not browser demo storage.
 
 ## Validation Status
 
 Validation to date is technical and workflow-focused:
 
 - Unit and component tests cover personalization helpers, monthly-plan logic, therapist workflows, family sign-in, admin credential controls, reporting defaults, and all game engine smoke paths.
+- Backend API tests cover login, invalid credentials, role restrictions, child creation, result recording, and audit event creation.
 - Backend type-checking covers the Postgres API foundation.
 - Build verification is run with `npm run build` using Vite.
+- Production dependency audit currently reports zero vulnerabilities with `npm audit --omit=dev`.
 
 No clinical efficacy claims should be made until a documented pilot is completed. A pilot with security/privacy review, consent materials, deployment logging, and pre-defined outcome measures remains the next evidence step.
 
@@ -50,10 +54,18 @@ No clinical efficacy claims should be made until a documented pilot is completed
 
 Implemented safeguards include server-side auth, Argon2id password hashing, JWT sessions with HTTP-only cookie support, RBAC, clinic-scoped Postgres records, request validation, security middleware, and audit logging.
 
+Draft review artifacts are included:
+
+- `docs/security-data-protection-review-plan.md`
+- `docs/data-governance-policy.md`
+- `docs/pilot-validation-protocol.md`
+- `docs/grant-technical-appendix.md`
+- `docs/production-readiness.md`
+
 The platform has not yet completed an independent security audit, HIPAA risk analysis, DPIA, penetration test, or formal data protection review. Those reviews should be completed before live clinical deployment with real PHI/PII.
 
 ## Grant/Reviewer Note
 
 Grant-safe wording:
 
-"The platform is complete as a functional application and now includes a self-hosted Postgres production backend foundation with real authentication, role-based authorization, audit logging, and structured clinical workflow data storage. The grant will support the final production-hardening and evidence-generation steps: independent security/data protection review, pilot deployment, validation reporting, and publication preparation."
+"The platform is complete as a functional application and now includes a self-hosted Postgres production backend foundation with real authentication, role-based authorization, audit logging, structured clinical workflow data storage, frontend API integration methods, backend API tests, and draft security/data-governance/pilot documentation. The grant will support the final production-hardening and evidence-generation steps: independent security/data protection review, pilot deployment, validation reporting, and publication preparation."

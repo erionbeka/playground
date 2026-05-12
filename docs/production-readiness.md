@@ -1,6 +1,6 @@
 ﻿# Production Readiness Plan
 
-Playground Life now has a Postgres-backed production API foundation in addition to the existing React application prototype. This document distinguishes between what is implemented, what is ready for controlled deployment, and what must still be completed before handling real clinic or child data.
+Playground Life now has a Postgres-backed production API foundation in addition to the existing React application. This document distinguishes between what is implemented, what is validated, and what must still be completed before handling real clinic or child data.
 
 ## Implemented Production Foundation
 
@@ -14,6 +14,8 @@ Playground Life now has a Postgres-backed production API foundation in addition 
 - Security middleware: Helmet, CORS allowlist, JSON body size limits, cookie parsing, and rate limiting.
 - Server-side audit logging for sign-in, sign-out, staff creation, child creation, assignment creation, assignment approval, and game result recording.
 - Migration and seed scripts for a self-hosted Postgres environment.
+- Typed frontend API client under `src/lib/productionApi.ts` for auth, children, assignments, results, and audit logs.
+- Backend API tests under `server/server.test.ts`.
 
 ## Commands
 
@@ -25,7 +27,7 @@ npm run dev:api
 npm run dev
 ```
 
-The API expects `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, and cookie settings in `.env`.
+The API expects `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, and cookie settings in `.env`. The frontend API client uses `VITE_API_URL` and defaults to `http://localhost:4000`.
 
 ## Data Stored in Postgres
 
@@ -44,27 +46,31 @@ The production schema stores:
 ## Validation Completed
 
 - Existing frontend tests cover app workflows, personalization logic, reporting behavior, and game-engine smoke coverage.
-- API TypeScript type-checking should be run with `npm run typecheck:server`.
-- Production build should be run with `npm run build`.
-- Linting should be run with `npm run lint`.
-- Database migration should be tested against a clean Postgres database and a staging clone before production.
+- Backend API tests cover authentication, authorization, child creation, assignment access restrictions, result recording, and audit creation.
+- API TypeScript type-checking runs with `npm run typecheck:server`.
+- Production build runs with `npm run build`.
+- Linting runs with `npm run lint`.
+- Production dependency audit runs with `npm audit --omit=dev` and currently reports zero vulnerabilities.
 
 ## Security and Data Protection Review Status
 
-Implemented technical controls are not the same as a completed independent review. The application now has the core technical foundation needed for production hardening, but the following must be completed before real PHI/PII is entered:
+Implemented technical controls are not the same as a completed independent review. The application now has the core technical foundation needed for production hardening, plus draft review documents:
+
+- `docs/security-data-protection-review-plan.md`
+- `docs/data-governance-policy.md`
+- `docs/pilot-validation-protocol.md`
+
+The following must still be completed before real PHI/PII is entered:
 
 - Independent security review or penetration test.
 - HIPAA risk analysis or applicable data protection impact assessment.
 - Vendor/hosting review and BAA or data-processing agreement where applicable.
-- Dependency audit triage and remediation plan.
 - Backup and restore test.
-- Incident response procedure.
-- Access review policy.
-- Data retention, deletion, and export procedures.
-- Consent and pilot protocol review.
+- Incident response procedure approval.
+- Access review policy approval.
+- Final data retention, deletion, and export procedures.
+- Consent and pilot protocol approval.
 
 ## Recommended Grant Position
 
-The strongest accurate position is:
-
-"The platform is complete as a functional application and now includes a self-hosted Postgres production backend foundation with real authentication, role-based authorization, audit logging, and structured clinical workflow data storage. The grant will support the final production-hardening and evidence-generation steps: independent security/data protection review, pilot deployment, validation reporting, and publication preparation."
+"The platform is complete as a functional application and now includes a self-hosted Postgres production backend foundation with real authentication, role-based authorization, audit logging, structured clinical workflow data storage, a frontend API integration client, backend API tests, and draft security/data-governance/pilot documentation. The grant will support the final production-hardening and evidence-generation steps: independent security/data protection review, pilot deployment, validation reporting, and publication preparation."
