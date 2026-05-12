@@ -185,6 +185,171 @@ function makeGames(): GameConfig[] {
     });
   });
 
+  const froebelBuilds = [
+    {
+      name: "Build a Triangle",
+      description: "Choose the right pieces to build a triangle shape",
+      difficulty: "easy" as Difficulty,
+      estimatedMinutes: 4,
+      objective: "Build a triangle with three matching edges",
+      template: ["/\\", "[]", "/\\"],
+      pieceOptions: ["/\\", "[]", "o", "="],
+      skills: ["geometry", "spatial reasoning", "planning"],
+    },
+    {
+      name: "Build a Square",
+      description: "Place equal pieces to complete a square",
+      difficulty: "easy" as Difficulty,
+      estimatedMinutes: 4,
+      objective: "Build a square using four equal sides",
+      template: ["[]", "[]", "[]", "[]"],
+      pieceOptions: ["[]", "/\\", "o", "||"],
+      skills: ["geometry", "visual-motor", "planning"],
+    },
+    {
+      name: "Build a Rectangle",
+      description: "Notice the long and short sides while building a rectangle",
+      difficulty: "medium" as Difficulty,
+      estimatedMinutes: 5,
+      objective: "Build a rectangle with matching opposite sides",
+      template: ["[]", "=", "[]", "="],
+      pieceOptions: ["[]", "=", "/\\", "o"],
+      skills: ["geometry", "spatial reasoning", "sequencing"],
+    },
+    {
+      name: "Build a Diamond",
+      description: "Rotate and place angled pieces to build a diamond",
+      difficulty: "medium" as Difficulty,
+      estimatedMinutes: 5,
+      objective: "Build a diamond from angled pieces",
+      template: ["/\\", "<>", "\\/", "<>"],
+      pieceOptions: ["/\\", "<>", "\\/", "[]"],
+      skills: ["geometry", "planning", "visual discrimination"],
+    },
+    {
+      name: "Pattern Block Flower",
+      description: "Build a flower from repeated shape pieces",
+      difficulty: "medium" as Difficulty,
+      estimatedMinutes: 5,
+      objective: "Repeat the same shape pattern around the center",
+      template: ["o", "/\\", "/\\", "/\\", "/\\"],
+      pieceOptions: ["o", "/\\", "[]", "="],
+      skills: ["patterns", "spatial reasoning", "attention"],
+    },
+    {
+      name: "Build a Block Bridge",
+      description: "Use simple block pieces to build a bridge shape",
+      difficulty: "hard" as Difficulty,
+      estimatedMinutes: 6,
+      objective: "Build a bridge with two supports and a top beam",
+      template: ["||", "=", "||", "[]"],
+      pieceOptions: ["||", "=", "[]", "/\\"],
+      skills: ["planning", "spatial reasoning", "problem solving"],
+    },
+  ];
+
+  froebelBuilds.forEach((game) => {
+    games.push({
+      id: gid(),
+      name: game.name,
+      emoji: "[]",
+      category: "building",
+      engine: "building",
+      description: game.description,
+      skills: game.skills,
+      difficulty: game.difficulty,
+      estimatedMinutes: game.estimatedMinutes,
+      supportsShared: true,
+      supportsMultiplayer: false,
+      config: {
+        objective: game.objective,
+        template: game.template,
+        pieceOptions: game.pieceOptions,
+        source: "Froebel-inspired",
+      },
+    });
+  });
+
+  const physicalPlayBuilds = [
+    {
+      name: "Symmetry Board",
+      objective: "Copy the left side so both sides match",
+      modelLabel: "Mirror board",
+      template: ["[]", "/\\", "/\\", "[]"],
+      pieceOptions: ["[]", "/\\", "o", "="],
+      difficulty: "easy" as Difficulty,
+      skills: ["symmetry", "spatial reasoning", "attention"],
+    },
+    {
+      name: "Copy the Pattern",
+      objective: "Copy the repeating shape pattern from the model",
+      modelLabel: "ABAB pattern",
+      template: ["[]", "o", "[]", "o"],
+      pieceOptions: ["[]", "o", "/\\", "="],
+      difficulty: "easy" as Difficulty,
+      skills: ["patterns", "sequencing", "visual-motor"],
+    },
+    {
+      name: "Block Tower",
+      objective: "Stack the tower from bottom to top",
+      modelLabel: "Tall tower",
+      template: ["[]", "[]", "[]", "/\\"],
+      pieceOptions: ["[]", "/\\", "o", "||"],
+      difficulty: "medium" as Difficulty,
+      skills: ["planning", "motor", "spatial reasoning"],
+    },
+    {
+      name: "Bridge From Model",
+      objective: "Build the bridge to match the model",
+      modelLabel: "Bridge with two supports",
+      template: ["||", "=", "||", "[]"],
+      pieceOptions: ["||", "=", "[]", "/\\"],
+      difficulty: "medium" as Difficulty,
+      skills: ["problem solving", "planning", "spatial reasoning"],
+    },
+    {
+      name: "Stair Step Builder",
+      objective: "Build the steps in the right order",
+      modelLabel: "Three-step stair",
+      template: ["[]", "[]", "=", "="],
+      pieceOptions: ["[]", "=", "/\\", "o"],
+      difficulty: "medium" as Difficulty,
+      skills: ["sequencing", "spatial reasoning", "planning"],
+    },
+    {
+      name: "Shape Mirror Bridge",
+      objective: "Place matching pieces on both sides of the center",
+      modelLabel: "Mirror bridge",
+      template: ["/\\", "[]", "[]", "/\\"],
+      pieceOptions: ["/\\", "[]", "o", "T"],
+      difficulty: "hard" as Difficulty,
+      skills: ["symmetry", "attention", "planning"],
+    },
+  ];
+
+  physicalPlayBuilds.forEach((game) => {
+    games.push({
+      id: gid(),
+      name: game.name,
+      emoji: "[]",
+      category: "building",
+      engine: "building",
+      description: game.objective,
+      skills: game.skills,
+      difficulty: game.difficulty,
+      estimatedMinutes: 5,
+      supportsShared: true,
+      supportsMultiplayer: false,
+      config: {
+        objective: game.objective,
+        modelLabel: game.modelLabel,
+        template: game.template,
+        pieceOptions: game.pieceOptions,
+        source: "physical-play-inspired",
+      },
+    });
+  });
+
   const colorShapeThemes = ["Red Things", "Blue Things", "Round Objects", "Square Objects", "Rainbow Sort", "Shape Shadows", "Color Mixing", "Pattern Fill", "Shape Puzzle", "Color Match", "Triangle Hunt", "Symmetry Mirror"];
   colorShapeThemes.forEach((theme, index) => {
     games.push({

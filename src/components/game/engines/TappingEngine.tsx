@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { GameConfig } from "@/data/games";
+import { clamp, getAdaptiveGameConfig } from "@/lib/gameProgression";
 
 interface Props {
   game: GameConfig;
@@ -9,43 +10,76 @@ interface Props {
 }
 
 const themeVisuals: Record<string, { emoji: string; background: string; renderAs?: "emoji" | "balloon" }> = {
-  butterflies: { emoji: "🦋", background: "from-fuchsia-200/70 via-pink-100/60 to-sky-100/60" },
-  bubbles: { emoji: "🫧", background: "from-cyan-100/70 via-sky-100/70 to-white/60" },
-  stars: { emoji: "⭐", background: "from-amber-100/80 via-yellow-100/70 to-orange-100/60" },
-  fish: { emoji: "🐠", background: "from-cyan-100/80 via-sky-100/70 to-emerald-100/60" },
-  balloons: { emoji: "🎈", background: "from-rose-100/80 via-orange-100/70 to-sky-100/60", renderAs: "balloon" },
-  fireflies: { emoji: "✨", background: "from-amber-100/80 via-lime-100/60 to-emerald-100/60" },
-  leaves: { emoji: "🍃", background: "from-emerald-100/80 via-lime-100/70 to-yellow-100/60" },
-  snowflakes: { emoji: "❄️", background: "from-sky-100/80 via-cyan-50/80 to-white/70" },
-  raindrops: { emoji: "💧", background: "from-sky-100/80 via-cyan-100/70 to-indigo-100/60" },
-  birds: { emoji: "🐦", background: "from-sky-100/80 via-white/70 to-emerald-100/60" },
-  ladybugs: { emoji: "🐞", background: "from-rose-100/80 via-red-100/70 to-amber-100/60" },
-  flowers: { emoji: "🌸", background: "from-pink-100/80 via-fuchsia-100/70 to-lavender-100/60" },
-  jellyfish: { emoji: "🪼", background: "from-cyan-100/80 via-violet-100/70 to-fuchsia-100/60" },
-  rockets: { emoji: "🚀", background: "from-indigo-100/80 via-sky-100/70 to-slate-100/60" },
-  clouds: { emoji: "☁️", background: "from-slate-100/80 via-sky-100/70 to-white/70" },
-  "trace lines": { emoji: "✏️", background: "from-amber-100/80 via-orange-100/70 to-white/70" },
-  "connect dots": { emoji: "🔵", background: "from-sky-100/80 via-indigo-100/70 to-white/70" },
-  "drag & drop": { emoji: "🧲", background: "from-fuchsia-100/80 via-rose-100/70 to-sky-100/60" },
-  "pinch & zoom": { emoji: "🤏", background: "from-lime-100/80 via-emerald-100/70 to-sky-100/60" },
-  "swipe patterns": { emoji: "〰️", background: "from-violet-100/80 via-fuchsia-100/70 to-cyan-100/60" },
-  "follow the path": { emoji: "🛤️", background: "from-amber-100/80 via-lime-100/70 to-sky-100/60" },
-  "catch the ball": { emoji: "⚽", background: "from-lime-100/80 via-emerald-100/70 to-yellow-100/60" },
-  "pop & hold": { emoji: "🫧", background: "from-cyan-100/80 via-sky-100/70 to-violet-100/60" },
-  "slow drag": { emoji: "🖐️", background: "from-rose-100/80 via-orange-100/70 to-amber-100/60" },
-  "circle draw": { emoji: "⭕", background: "from-fuchsia-100/80 via-pink-100/70 to-orange-100/60" },
-  "zig-zag trace": { emoji: "⚡", background: "from-yellow-100/80 via-amber-100/70 to-orange-100/60" },
-  "target aim": { emoji: "🎯", background: "from-rose-100/80 via-orange-100/70 to-yellow-100/60" },
-  default: { emoji: "⭐", background: "from-sky-100/80 via-white/70 to-fuchsia-100/60" },
+  butterflies: { emoji: "butterfly", background: "from-fuchsia-200/70 via-pink-100/60 to-sky-100/60" },
+  bubbles: { emoji: "bubble", background: "from-cyan-100/70 via-sky-100/70 to-white/60" },
+  stars: { emoji: "star", background: "from-amber-100/80 via-yellow-100/70 to-orange-100/60" },
+  fish: { emoji: "fish", background: "from-cyan-100/80 via-sky-100/70 to-emerald-100/60" },
+  balloons: { emoji: "balloon", background: "from-rose-100/80 via-orange-100/70 to-sky-100/60", renderAs: "balloon" },
+  fireflies: { emoji: "spark", background: "from-amber-100/80 via-lime-100/60 to-emerald-100/60" },
+  leaves: { emoji: "leaf", background: "from-emerald-100/80 via-lime-100/70 to-yellow-100/60" },
+  snowflakes: { emoji: "snow", background: "from-sky-100/80 via-cyan-50/80 to-white/70" },
+  raindrops: { emoji: "drop", background: "from-sky-100/80 via-cyan-100/70 to-indigo-100/60" },
+  birds: { emoji: "bird", background: "from-sky-100/80 via-white/70 to-emerald-100/60" },
+  ladybugs: { emoji: "ladybug", background: "from-rose-100/80 via-red-100/70 to-amber-100/60" },
+  flowers: { emoji: "flower", background: "from-pink-100/80 via-fuchsia-100/70 to-violet-100/60" },
+  jellyfish: { emoji: "jellyfish", background: "from-cyan-100/80 via-violet-100/70 to-fuchsia-100/60" },
+  rockets: { emoji: "rocket", background: "from-indigo-100/80 via-sky-100/70 to-slate-100/60" },
+  clouds: { emoji: "cloud", background: "from-slate-100/80 via-sky-100/70 to-white/70" },
+  "trace lines": { emoji: "trace", background: "from-amber-100/80 via-orange-100/70 to-white/70" },
+  "connect dots": { emoji: "dot", background: "from-sky-100/80 via-indigo-100/70 to-white/70" },
+  "drag & drop": { emoji: "block", background: "from-fuchsia-100/80 via-rose-100/70 to-sky-100/60" },
+  "pinch & zoom": { emoji: "pinch", background: "from-lime-100/80 via-emerald-100/70 to-sky-100/60" },
+  "swipe patterns": { emoji: "wave", background: "from-violet-100/80 via-fuchsia-100/70 to-cyan-100/60" },
+  "follow the path": { emoji: "path", background: "from-amber-100/80 via-lime-100/70 to-sky-100/60" },
+  "catch the ball": { emoji: "ball", background: "from-lime-100/80 via-emerald-100/70 to-yellow-100/60" },
+  "pop & hold": { emoji: "hold", background: "from-cyan-100/80 via-sky-100/70 to-violet-100/60" },
+  "slow drag": { emoji: "drag", background: "from-rose-100/80 via-orange-100/70 to-amber-100/60" },
+  "circle draw": { emoji: "circle", background: "from-fuchsia-100/80 via-pink-100/70 to-orange-100/60" },
+  "zig-zag trace": { emoji: "bolt", background: "from-yellow-100/80 via-amber-100/70 to-orange-100/60" },
+  "target aim": { emoji: "target", background: "from-rose-100/80 via-orange-100/70 to-yellow-100/60" },
+  default: { emoji: "star", background: "from-sky-100/80 via-white/70 to-fuchsia-100/60" },
 };
+
+const iconMap: Record<string, string> = {
+  butterfly: "B",
+  bubble: "o",
+  star: "*",
+  fish: "><>",
+  balloon: "O",
+  spark: "+",
+  leaf: "L",
+  snow: "x",
+  drop: "v",
+  bird: "V",
+  ladybug: "@",
+  flower: "F",
+  jellyfish: "J",
+  rocket: "^",
+  cloud: "C",
+  trace: "/",
+  dot: ".",
+  block: "#",
+  pinch: "<>",
+  wave: "~",
+  path: "=",
+  ball: "o",
+  hold: "O",
+  drag: "D",
+  circle: "O",
+  bolt: "Z",
+  target: "+",
+};
+
+const distractorPool = ["x", "+", "~", ".", "#"];
 
 interface Target {
   id: number;
   x: number;
   y: number;
-  emoji: string;
+  label: string;
   size: number;
   rotation: number;
+  kind: "target" | "distractor";
 }
 
 function BalloonTarget({ size }: { size: number }) {
@@ -63,20 +97,42 @@ export default function TappingEngine({ game, onInteraction, onComplete }: Props
   const theme = ((game.config.theme as string) || "default").toLowerCase();
   const visual = themeVisuals[theme] || themeVisuals.default;
   const speed = (game.config.speed as string) || "medium";
+  const { difficulty, supportLevel, readinessStage } = getAdaptiveGameConfig(game);
   const [targets, setTargets] = useState<Target[]>([]);
-  const [score, setScore] = useState(0);
+  const [hits, setHits] = useState(0);
   const [missed, setMissed] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(30);
+  const [wrongTaps, setWrongTaps] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(24);
   const idRef = useRef(0);
   const missTimeoutsRef = useRef<number[]>([]);
+  const spawnLoopRef = useRef<number | null>(null);
+  const timeLeftRef = useRef(timeLeft);
+  const hitsRef = useRef(hits);
 
-  const spawnInterval = speed === "slow" ? 1400 : speed === "medium" ? 950 : 650;
-  const targetLifetime = speed === "slow" ? 2400 : speed === "medium" ? 2000 : 1600;
+  const goalBase = difficulty === "easy" ? 10 : difficulty === "medium" ? 14 : 18;
+  const goal = supportLevel === "high" ? Math.max(8, goalBase - 3) : supportLevel === "light" ? goalBase + 2 : goalBase;
+  const showDistractors = supportLevel !== "high" && difficulty !== "easy";
+  const calmPrompt = theme.includes("trace") || theme.includes("slow") || theme.includes("path") || theme.includes("connect");
+  const baseSpawnInterval = speed === "slow" ? 1400 : speed === "medium" ? 950 : 650;
+  const readinessAdjustment = readinessStage === "stabilize" ? 220 : readinessStage === "stretch" ? -120 : 0;
+  const spawnInterval = supportLevel === "high" ? baseSpawnInterval + 250 + readinessAdjustment : supportLevel === "light" ? Math.max(450, baseSpawnInterval - 120 + readinessAdjustment) : baseSpawnInterval + readinessAdjustment;
+  const baseTargetLifetime = speed === "slow" ? 2400 : speed === "medium" ? 2000 : 1600;
+  const targetLifetime = supportLevel === "high" ? baseTargetLifetime + 350 : supportLevel === "light" ? Math.max(1200, baseTargetLifetime - 180) : baseTargetLifetime;
 
   const accuracy = useMemo(() => {
-    const totalAttempts = score + missed;
-    return totalAttempts > 0 ? Math.round((score / totalAttempts) * 100) : 100;
-  }, [missed, score]);
+    const totalAttempts = hits + missed + wrongTaps;
+    return totalAttempts > 0 ? Math.round((hits / totalAttempts) * 100) : 100;
+  }, [hits, missed, wrongTaps]);
+
+  const progress = useMemo(() => Math.round((hits / goal) * 100), [goal, hits]);
+
+  useEffect(() => {
+    timeLeftRef.current = timeLeft;
+  }, [timeLeft]);
+
+  useEffect(() => {
+    hitsRef.current = hits;
+  }, [hits]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -97,45 +153,74 @@ export default function TappingEngine({ game, onInteraction, onComplete }: Props
 
     missTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
     missTimeoutsRef.current = [];
-
-    onComplete(accuracy);
-  }, [accuracy, onComplete, timeLeft]);
+    onComplete(clamp(Math.round((accuracy + progress) / 2), 35, 100));
+  }, [accuracy, onComplete, progress, timeLeft]);
 
   useEffect(() => {
-    if (timeLeft <= 0) return;
+    if (hits < goal || timeLeft <= 0) return;
 
-    const spawner = window.setInterval(() => {
-      const id = idRef.current++;
-      const timeoutId = window.setTimeout(() => {
-        setTargets((currentTargets) => {
-          const stillVisible = currentTargets.some((target) => target.id === id);
-          if (stillVisible) {
-            setMissed((currentMissed) => currentMissed + 1);
-          }
-          return currentTargets.filter((target) => target.id !== id);
-        });
-      }, targetLifetime);
+    missTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    missTimeoutsRef.current = [];
+    onComplete(clamp(Math.round((accuracy + progress) / 2), 60, 100));
+  }, [accuracy, goal, hits, onComplete, progress, timeLeft]);
 
-      missTimeoutsRef.current.push(timeoutId);
+  const spawnTarget = useCallback(() => {
+    if (timeLeftRef.current <= 0 || hitsRef.current >= goal) return;
 
-      setTargets((currentTargets) => [
-        ...currentTargets,
-        {
-          id,
-          x: 8 + Math.random() * 76,
-          y: 12 + Math.random() * 62,
-          emoji: visual.emoji,
-          size: 54 + Math.round(Math.random() * 14),
-          rotation: -12 + Math.round(Math.random() * 24),
-        },
-      ]);
-    }, spawnInterval);
+    const id = idRef.current++;
+    const spawnDistractor = showDistractors && Math.random() > (difficulty === "hard" || supportLevel === "light" ? 0.45 : 0.72);
+    const kind: Target["kind"] = spawnDistractor ? "distractor" : "target";
+    const timeoutId = window.setTimeout(() => {
+      setTargets((currentTargets) => {
+        const currentTarget = currentTargets.find((target) => target.id === id);
+        if (currentTarget?.kind === "target") {
+          setMissed((currentMissed) => currentMissed + 1);
+        }
+        return currentTargets.filter((target) => target.id !== id);
+      });
+    }, targetLifetime);
 
-    return () => window.clearInterval(spawner);
-  }, [spawnInterval, targetLifetime, timeLeft, visual.emoji]);
+    missTimeoutsRef.current.push(timeoutId);
+
+    setTargets((currentTargets) => [
+      ...currentTargets,
+      {
+        id,
+        x: 8 + Math.random() * 76,
+        y: 12 + Math.random() * 62,
+        label: kind === "target" ? visual.emoji : distractorPool[id % distractorPool.length],
+        size: 54 + Math.round(Math.random() * 14),
+        rotation: -12 + Math.round(Math.random() * 24),
+        kind,
+      },
+    ]);
+  }, [difficulty, goal, showDistractors, supportLevel, targetLifetime, visual.emoji]);
+
+  useEffect(() => {
+    if (timeLeft <= 0 || hits >= goal) return;
+
+    const runLoop = () => {
+      spawnTarget();
+      if (timeLeftRef.current <= 0 || hitsRef.current >= goal) return;
+      spawnLoopRef.current = window.setTimeout(runLoop, spawnInterval);
+    };
+
+    runLoop();
+
+    return () => {
+      if (spawnLoopRef.current !== null) {
+        window.clearTimeout(spawnLoopRef.current);
+        spawnLoopRef.current = null;
+      }
+    };
+  }, [goal, hits, spawnInterval, spawnTarget, timeLeft]);
 
   useEffect(() => {
     return () => {
+      if (spawnLoopRef.current !== null) {
+        window.clearTimeout(spawnLoopRef.current);
+        spawnLoopRef.current = null;
+      }
       missTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
       missTimeoutsRef.current = [];
     };
@@ -143,16 +228,26 @@ export default function TappingEngine({ game, onInteraction, onComplete }: Props
 
   const handleTap = (id: number) => {
     onInteraction();
-    setScore((currentScore) => currentScore + 1);
-    setTargets((currentTargets) => currentTargets.filter((target) => target.id !== id));
+    setTargets((currentTargets) => {
+      const tapped = currentTargets.find((target) => target.id === id);
+      if (tapped?.kind === "target") {
+        setHits((currentScore) => currentScore + 1);
+      } else {
+        setWrongTaps((currentWrongTaps) => currentWrongTaps + 1);
+      }
+      return currentTargets.filter((target) => target.id !== id);
+    });
   };
 
   return (
     <div className="mx-auto max-w-lg">
       <div className="mb-3 flex justify-between text-sm text-muted-foreground">
         <span>Time {timeLeft}s</span>
-        <span>Score {score}</span>
+        <span>Targets {hits}/{goal}</span>
         <span>Accuracy {accuracy}%</span>
+      </div>
+      <div className="mb-3 h-3 overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(progress, 100)}%` }} />
       </div>
 
       <div
@@ -162,7 +257,16 @@ export default function TappingEngine({ game, onInteraction, onComplete }: Props
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.48),_transparent_38%),radial-gradient(circle_at_bottom,_rgba(255,255,255,0.3),_transparent_42%)]" />
 
         <div className="absolute left-4 top-4 rounded-full bg-white/65 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm">
-          Tap the {theme === "default" ? "targets" : theme}
+          {calmPrompt ? `Tap carefully through ${theme}` : `Catch ${goal} ${theme === "default" ? "targets" : theme}`}
+        </div>
+
+        {showDistractors ? (
+          <div className="absolute right-4 top-4 rounded-full bg-slate-900/8 px-3 py-1 text-[11px] font-semibold text-slate-700">
+            Ignore the decoys
+          </div>
+        ) : null}
+        <div className="absolute left-4 bottom-4 rounded-full bg-white/65 px-3 py-1 text-[11px] font-semibold text-slate-700 shadow-sm">
+          Support: {supportLevel} · Stage: {readinessStage}
         </div>
 
         <AnimatePresence>
@@ -174,29 +278,32 @@ export default function TappingEngine({ game, onInteraction, onComplete }: Props
               exit={{ opacity: 0, scale: 0.4 }}
               transition={{ duration: 0.3 }}
               onClick={() => handleTap(target.id)}
-              className="touch-target absolute flex items-center justify-center drop-shadow-[0_10px_18px_rgba(15,23,42,0.2)]"
+              className="touch-target absolute flex items-center justify-center font-bold text-slate-700 drop-shadow-[0_10px_18px_rgba(15,23,42,0.2)]"
               style={{
                 left: `${target.x}%`,
                 top: `${target.y}%`,
                 width: `${target.size}px`,
-                height: `${target.size + (visual.renderAs === "balloon" ? 24 : 0)}px`,
+                height: `${target.size + (visual.renderAs === "balloon" && target.kind === "target" ? 24 : 0)}px`,
                 marginLeft: `-${target.size / 2}px`,
                 marginTop: `-${target.size / 2}px`,
                 transform: `rotate(${target.rotation}deg)`,
-                fontSize: `${Math.max(34, target.size - 10)}px`,
+                fontSize: `${Math.max(24, target.size - 18)}px`,
+                opacity: target.kind === "target" ? 1 : 0.72,
               }}
+              aria-label={target.kind === "target" ? `${theme} target` : "decoy target"}
             >
-              {visual.renderAs === "balloon" ? <BalloonTarget size={target.size} /> : target.emoji}
+              {target.kind === "target" && visual.renderAs === "balloon" ? <BalloonTarget size={target.size} /> : (iconMap[target.label] || target.label)}
             </motion.button>
           ))}
         </AnimatePresence>
 
-        {timeLeft === 0 ? (
+        {timeLeft === 0 || hits >= goal ? (
           <div className="absolute inset-0 flex items-center justify-center rounded-[2rem] bg-card/72 backdrop-blur-sm">
             <div className="text-center">
-              <p className="mb-2 text-5xl">🎉</p>
-              <p className="font-display text-xl font-bold text-foreground">You caught {score}!</p>
+              <p className="mb-2 text-5xl">Play</p>
+              <p className="font-display text-xl font-bold text-foreground">You caught {hits} targets!</p>
               <p className="mt-1 text-sm text-muted-foreground">Accuracy: {accuracy}%</p>
+              <p className="mt-1 text-sm text-muted-foreground">Decoys tapped: {wrongTaps}</p>
             </div>
           </div>
         ) : null}

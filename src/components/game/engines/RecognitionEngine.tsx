@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { GameConfig } from "@/data/games";
+import { shuffleItems } from "@/lib/shuffle";
+import { getAdaptiveGameConfig } from "@/lib/gameProgression";
 
 interface Props {
   game: GameConfig;
@@ -7,45 +9,60 @@ interface Props {
   onComplete: (score: number) => void;
 }
 
-const themeTargets: Record<string, { target: string; items: string[] }> = {
-  "red things": { target: "Pick the red things", items: ["🍎", "🚗", "🍓", "🔵", "🌹", "🟢"] },
-  "blue things": { target: "Pick the blue things", items: ["🫐", "🐟", "🔵", "🍋", "🍎", "🟡"] },
-  "round objects": { target: "Pick the round objects", items: ["⚽", "🟡", "🍪", "📘", "🧱", "🔺"] },
-  "square objects": { target: "Pick the square objects", items: ["🟦", "⬜", "📦", "⚽", "🍊", "🌙"] },
-  "learn animals": { target: "Tap the animals", items: ["🐶", "🚗", "🐱", "🐸", "🎈", "🐰"] },
-  "learn emotions": { target: "Tap the faces showing emotions", items: ["😊", "😮", "📘", "😢", "🧩", "😡"] },
-  "learn colors": { target: "Tap the color circles", items: ["🔴", "🔵", "🟢", "🍎", "🚗", "🌼"] },
-  "learn shapes": { target: "Tap the shapes", items: ["🔺", "🟦", "⭐", "🍎", "🚗", "🌼"] },
-  default: { target: "Pick the matching items", items: ["⭐", "⭐", "🎈", "🧩", "⭐", "🎨"] },
+const themeTargets: Record<string, { target: string; items: string[]; correctItems: string[] }> = {
+  "red things": { target: "Pick the red things", items: ["🍎", "🚗", "🍓", "🔵", "🌹", "🟢"], correctItems: ["🍎", "🚗", "🍓", "🌹"] },
+  "blue things": { target: "Pick the blue things", items: ["🫐", "🐟", "🔵", "🍋", "🍎", "🟡"], correctItems: ["🫐", "🐟", "🔵"] },
+  "round objects": { target: "Pick the round objects", items: ["⚽", "🟡", "🍪", "📘", "🧱", "🔺"], correctItems: ["⚽", "🟡", "🍪"] },
+  "square objects": { target: "Pick the square objects", items: ["🟦", "⬜", "📦", "⚽", "🍊", "🌙"], correctItems: ["🟦", "⬜", "📦"] },
+  "learn animals": { target: "Tap the animals", items: ["🐶", "🚗", "🐱", "🐸", "🎈", "🐰"], correctItems: ["🐶", "🐱", "🐸", "🐰"] },
+  "learn emotions": { target: "Tap the faces showing emotions", items: ["😊", "😮", "📘", "😢", "🧩", "😡"], correctItems: ["😊", "😮", "😢", "😡"] },
+  "learn colors": { target: "Tap the color circles", items: ["🔴", "🔵", "🟢", "🍎", "🚗", "🌼"], correctItems: ["🔴", "🔵", "🟢"] },
+  "learn shapes": { target: "Tap the shapes", items: ["🔺", "🟦", "⭐", "🍎", "🚗", "🌼"], correctItems: ["🔺", "🟦", "⭐"] },
+  default: { target: "Pick the matching items", items: ["⭐", "⭐", "🎈", "🧩", "⭐", "🎨"], correctItems: ["⭐"] },
 };
 
 export default function RecognitionEngine({ game, onInteraction, onComplete }: Props) {
   const theme = String(game.config.theme || "default");
   const data = themeTargets[theme] || themeTargets.default;
-  const correctToken = data.items[0];
-  const pool = useMemo(() => [...data.items].sort(() => Math.random() - 0.5), [data.items]);
-  const totalCorrect = pool.filter((item) => item === correctToken).length;
+  const { personalized, supportLevel } = getAdaptiveGameConfig(game);
+  const correctItems = useMemo(() => {
+    if (personalized && supportLevel === "high") return data.correctItems.slice(0, Math.min(2, data.correctItems.length));
+    return data.correctItems;
+  }, [data.correctItems, personalized, supportLevel]);
+  const correctSet = useMemo(() => new Set(correctItems), [correctItems]);
+  const pool = useMemo(() => {
+    const wrongItems = data.items.filter((item) => !data.correctItems.includes(item));
+    const wrongLimit = personalized && supportLevel === "high" ? 2 : wrongItems.length;
+    return shuffleItems([...correctItems, ...wrongItems.slice(0, wrongLimit)]);
+  }, [correctItems, data.correctItems, data.items, personalized, supportLevel]);
+  const totalCorrect = correctItems.length;
   const [selected, setSelected] = useState<number[]>([]);
   const [correct, setCorrect] = useState(0);
+  const [mistakes, setMistakes] = useState(0);
 
   const handlePick = (index: number, value: string) => {
     if (selected.includes(index)) return;
 
     onInteraction();
     const nextSelected = [...selected, index];
-    const nextCorrect = correct + (value === correctToken ? 1 : 0);
+    const isCorrect = correctSet.has(value);
+    const nextCorrect = correct + (isCorrect ? 1 : 0);
+    const nextMistakes = mistakes + (isCorrect ? 0 : 1);
 
     setSelected(nextSelected);
     setCorrect(nextCorrect);
+    setMistakes(nextMistakes);
 
-    if (nextSelected.length >= pool.length) {
-      onComplete(Math.round((nextCorrect / totalCorrect) * 100));
+    if (nextCorrect >= totalCorrect) {
+      const score = Math.max(40, 100 - nextMistakes * 20);
+      onComplete(score);
     }
   };
 
   return (
     <div className="mx-auto max-w-lg text-center">
       <p className="mb-4 text-sm text-muted-foreground">{data.target}</p>
+      <p className="mb-4 text-xs text-muted-foreground">Find {totalCorrect} correct item{totalCorrect === 1 ? "" : "s"}.</p>
       <div className="grid grid-cols-3 gap-3">
         {pool.map((item, index) => (
           <button

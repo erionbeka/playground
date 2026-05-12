@@ -1,27 +1,20 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
 import { getGameById } from "@/data/games";
 import GamePlayer from "../game/GamePlayer";
+import { getPersonalizationSummary } from "@/lib/personalization";
 
 export default function ParentDashboard() {
-  const { setRole, children, assignments, selectedChildId, setSelectedChildId, currentAssignment, setCurrentAssignment } = useApp();
+  const { setRole, children, assignments, selectedChildId, setSelectedChildId, currentAssignment, setCurrentAssignment, signInFamily, signOut, session } = useApp();
+  const navigate = useNavigate();
   const [playingGameId, setPlayingGameId] = useState<string | null>(null);
   const [signedInFamilyMemberId, setSignedInFamilyMemberId] = useState<string | null>(null);
+  const [familyView, setFamilyView] = useState<"today" | "all" | "completed">("today");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [signInError, setSignInError] = useState("");
-
-  const familyProfiles = useMemo(
-    () =>
-      children.flatMap((child) =>
-        child.familyMembers.map((familyMember) => ({
-          child,
-          familyMember,
-        }))
-      ),
-    [children]
-  );
 
   const child = useMemo(
     () => children.find((candidate) => candidate.id === selectedChildId),
@@ -29,12 +22,12 @@ export default function ParentDashboard() {
   );
 
   const signedInFamilyMember = useMemo(
-    () => child?.familyMembers.find((familyMember) => familyMember.id === signedInFamilyMemberId) || null,
-    [child, signedInFamilyMemberId]
+    () => child?.familyMembers.find((familyMember) => familyMember.id === (signedInFamilyMemberId || session?.familyMemberId)) || null,
+    [child, session?.familyMemberId, signedInFamilyMemberId]
   );
 
   const childAssignments = useMemo(
-    () => assignments.filter((assignment) => assignment.childId === selectedChildId && assignment.type === "homework"),
+    () => assignments.filter((assignment) => assignment.childId === selectedChildId),
     [assignments, selectedChildId]
   );
 
@@ -47,10 +40,27 @@ export default function ParentDashboard() {
     () => childAssignments.filter((assignment) => assignment.status === "completed"),
     [childAssignments]
   );
+  const nextAssignment = useMemo(
+    () =>
+      [...pendingAssignments].sort((left, right) => {
+        const dateCompare = left.dueDate.localeCompare(right.dueDate);
+        if (dateCompare !== 0) return dateCompare;
+        return left.createdAt.localeCompare(right.createdAt);
+      })[0] || null,
+    [pendingAssignments]
+  );
 
   const childPersonalization = useMemo(
     () => (child?.notes ? `${child.name} ${child.notes.toLowerCase()}` : null),
     [child]
+  );
+  const personalizationSummary = useMemo(
+    () => (child ? getPersonalizationSummary(child, assignments) : null),
+    [assignments, child]
+  );
+  const nextGameId = useMemo(
+    () => nextAssignment?.gameIds.find((gameId) => !nextAssignment.completedGames.includes(gameId)) || null,
+    [nextAssignment]
   );
 
   const resetFamilySession = () => {
@@ -66,7 +76,7 @@ export default function ParentDashboard() {
     return (
       <div className="flex min-h-screen items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-md">
-          <button onClick={() => setRole("none")} className="absolute left-4 top-4 text-sm text-muted-foreground hover:text-foreground touch-target">
+          <button onClick={() => { setRole("none"); navigate("/"); }} className="absolute left-4 top-4 text-sm text-muted-foreground hover:text-foreground touch-target">
             Back
           </button>
 
@@ -86,11 +96,7 @@ export default function ParentDashboard() {
                 event.preventDefault();
 
                 const normalizedPhoneNumber = phoneNumber.replace(/\D/g, "");
-                const match = familyProfiles.find(
-                  ({ familyMember }) =>
-                    familyMember.phoneNumber.replace(/\D/g, "") === normalizedPhoneNumber &&
-                    familyMember.password === password
-                );
+                const match = signInFamily(normalizedPhoneNumber, password);
 
                 if (!match) {
                   setSignInError("We couldn't sign you in. Check the phone number and password and try again.");
@@ -98,8 +104,8 @@ export default function ParentDashboard() {
                 }
 
                 setSignInError("");
-                setSignedInFamilyMemberId(match.familyMember.id);
-                setSelectedChildId(match.child.id);
+                setSignedInFamilyMemberId(match.familyMemberId);
+                setSelectedChildId(match.childId);
               }}
             >
               <div className="space-y-2">
@@ -199,8 +205,9 @@ export default function ParentDashboard() {
 
         <button
           onClick={() => {
-            setRole("none");
+            signOut();
             resetFamilySession();
+            navigate("/");
           }}
           className="touch-target px-3 text-sm text-muted-foreground hover:text-foreground"
         >
@@ -209,11 +216,109 @@ export default function ParentDashboard() {
       </header>
 
       <div className="mx-auto max-w-3xl p-4 sm:p-6">
+        {personalizationSummary ? (
+          <div className="mb-6 rounded-2xl border border-primary/15 bg-primary/5 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Personalized Journey</p>
+            <p className="mt-1 font-display text-lg font-bold capitalize text-foreground">
+              {personalizationSummary.progressionStage} stage - working toward {personalizationSummary.recommendedDifficulty}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Recent average {personalizationSummary.recentAvgScore || personalizationSummary.avgScore}% across {personalizationSummary.completedGamesCount} completed games.
+            </p>
+            {personalizationSummary.nextChallengeCategories.length > 0 ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Up next: {personalizationSummary.nextChallengeCategories.map((category) => category.replace("-", " ")).join(", ")}
+              </p>
+            ) : null}
+            <p className="mt-2 text-sm text-foreground">
+              {personalizationSummary.familySummary}
+            </p>
+            {personalizationSummary.recommendationReasons.length > 0 ? (
+              <div className="mt-3 rounded-xl bg-white/60 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">This plan was chosen because</p>
+                <div className="mt-2 space-y-1 text-xs text-foreground">
+                  {personalizationSummary.recommendationReasons.slice(0, 2).map((reason) => (
+                    <p key={reason}>- {reason}</p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {pendingAssignments.length > 0 ? (
+          <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Today&apos;s Session</p>
+            {nextAssignment ? (
+              <>
+                <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-display text-xl font-bold text-foreground">
+                      {nextAssignment.type === "classwork" ? "Classwork session" : "Homework session"}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {nextAssignment.gameIds.length} games, {nextAssignment.difficulty}, {nextAssignment.mode === "shared" ? "with family" : "solo"}
+                    </p>
+                    {nextAssignment.monthlyPlan ? (
+                      <p className="mt-1 text-sm text-foreground">{nextAssignment.monthlyPlan.objective}</p>
+                    ) : null}
+                  </div>
+                  <span className="rounded-full bg-accent/20 px-3 py-1 text-xs font-semibold text-foreground">
+                    Due {nextAssignment.dueDate}
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                  <div className="rounded-xl bg-muted p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Start with</p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">
+                      {nextGameId ? getGameById(nextGameId)?.name || nextGameId : "This session is ready to review"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {nextAssignment.monthlyPlan?.familyGuidance?.[0] || "Keep the session calm and encouraging."}
+                    </p>
+                  </div>
+                  {nextGameId ? (
+                    <button
+                      onClick={() => {
+                        setCurrentAssignment(nextAssignment);
+                        setPlayingGameId(nextGameId);
+                      }}
+                      className="touch-target rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
+                    >
+                      Start today&apos;s session
+                    </button>
+                  ) : (
+                    <div className="rounded-xl bg-secondary/15 px-5 py-3 text-sm font-semibold text-foreground">
+                      Session complete
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mb-6 flex flex-wrap gap-2">
+          {([
+            ["today", "Today"],
+            ["all", "All To Do"],
+            ["completed", "Completed"],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setFamilyView(key)}
+              className={`touch-target rounded-full px-4 py-2 text-sm font-semibold transition-colors ${familyView === key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {familyView !== "completed" && pendingAssignments.length > 0 ? (
           <div className="mb-8">
-            <h2 className="mb-4 font-display text-lg font-bold text-foreground">To Do</h2>
+            <h2 className="mb-4 font-display text-lg font-bold text-foreground">{familyView === "today" ? "Today" : "To Do"}</h2>
             <div className="space-y-4">
-              {pendingAssignments.map((assignment) => {
+              {(familyView === "today" && nextAssignment ? [nextAssignment] : pendingAssignments).map((assignment) => {
                 const progress = assignment.gameIds.length > 0 ? Math.round((assignment.completedGames.length / assignment.gameIds.length) * 100) : 0;
                 const assignedFamilyMember = assignment.assignedFamilyMemberId
                   ? child?.familyMembers.find((familyMember) => familyMember.id === assignment.assignedFamilyMemberId)
@@ -227,6 +332,12 @@ export default function ParentDashboard() {
                         <p className="text-sm font-semibold text-foreground">
                           {assignment.gameIds.length} games - {assignment.difficulty} - {assignment.mode === "shared" ? "With Family" : "Solo"}
                         </p>
+                        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+                          {assignment.type}
+                        </p>
+                        {assignment.supportLevel ? (
+                          <p className="mt-1 text-xs text-muted-foreground">Support level: {assignment.supportLevel}</p>
+                        ) : null}
                         {assignedFamilyMember ? (
                           <p className="mt-1 text-xs font-semibold text-primary">
                             Assigned to: {assignedFamilyMember.avatar} {assignedFamilyMember.name}
@@ -244,6 +355,36 @@ export default function ParentDashboard() {
                       <div className="mb-4 rounded-xl bg-muted p-3">
                         <p className="text-xs text-muted-foreground">From therapist:</p>
                         <p className="text-sm text-foreground">{assignment.notes}</p>
+                      </div>
+                    ) : null}
+
+                    {assignment.monthlyPlan ? (
+                      <div className="mb-4 rounded-xl border border-primary/15 bg-primary/5 p-4">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Week {assignment.monthlyPlan.weekNumber} plan</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">{assignment.monthlyPlan.objective}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{assignment.monthlyPlan.rationale}</p>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                          <p>Support level: {assignment.monthlyPlan.supportLevel}</p>
+                          <p>Adult support: {assignment.monthlyPlan.adultSupport}</p>
+                          <p>Session target: {assignment.monthlyPlan.sessionLengthMinutes} min</p>
+                          <p>Next step: {assignment.monthlyPlan.progressionDecision}</p>
+                        </div>
+                        <div className="mt-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">How to help this week</p>
+                          <div className="mt-1 space-y-1 text-xs text-foreground">
+                            {assignment.monthlyPlan.familyGuidance.map((item) => (
+                              <p key={`${assignment.id}-${item}`}>- {item}</p>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="mt-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">What success looks like</p>
+                          <div className="mt-1 space-y-1 text-xs text-foreground">
+                            {assignment.monthlyPlan.successMarkers.map((item) => (
+                              <p key={`${assignment.id}-success-${item}`}>- {item}</p>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     ) : null}
 
@@ -288,7 +429,7 @@ export default function ParentDashboard() {
           </div>
         )}
 
-        {completedAssignments.length > 0 ? (
+        {familyView === "completed" && completedAssignments.length > 0 ? (
           <div>
             <h2 className="mb-4 font-display text-lg font-bold text-foreground">Completed</h2>
             <div className="space-y-3">

@@ -15,6 +15,7 @@ import MemoryEngine from "./engines/MemoryEngine";
 import BuildingEngine from "./engines/BuildingEngine";
 import CelebrationOverlay from "./CelebrationOverlay";
 import { useGameAudio } from "./useGameAudio";
+import { getChildReadinessState } from "@/lib/personalization";
 
 interface Props {
   gameId: string;
@@ -23,7 +24,7 @@ interface Props {
 }
 
 export default function GamePlayer({ gameId, assignment, onComplete }: Props) {
-  const { completeGame, children } = useApp();
+  const { completeGame, children, assignments } = useApp();
   const game = getGameById(gameId);
   const [started, setStarted] = useState(false);
   const [startTime] = useState(Date.now());
@@ -73,6 +74,24 @@ export default function GamePlayer({ gameId, assignment, onComplete }: Props) {
       ],
     };
   }, [child]);
+
+  const readiness = useMemo(
+    () => (child ? getChildReadinessState(child, assignments) : null),
+    [assignments, child]
+  );
+
+  const runtimeGame = useMemo(
+    () => ({
+      ...game,
+      config: {
+        ...game.config,
+        assignedDifficulty: assignment.difficulty || game.difficulty,
+        supportLevel: assignment.supportLevel || game.config.supportLevel || "moderate",
+        readinessStage: readiness?.stage || "build",
+      },
+    }),
+    [assignment.difficulty, assignment.supportLevel, game, readiness?.stage]
+  );
 
   const handleInteraction = useCallback(() => {
     playTapSound();
@@ -152,7 +171,7 @@ export default function GamePlayer({ gameId, assignment, onComplete }: Props) {
     );
   }
 
-  const engineProps = { game, onInteraction: handleInteraction, onComplete: handleGameComplete };
+  const engineProps = { game: runtimeGame, onInteraction: handleInteraction, onComplete: handleGameComplete };
 
   return (
     <div className="min-h-screen">

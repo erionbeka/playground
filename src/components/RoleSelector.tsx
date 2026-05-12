@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
-import { useApp } from "@/context/AppContext";
+import { useNavigate } from "react-router-dom";
 
 export default function RoleSelector() {
-  const { setRole } = useApp();
+  const navigate = useNavigate();
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4 sm:p-6">
@@ -19,7 +19,7 @@ export default function RoleSelector() {
             transition={{ delay: 0.2, duration: 0.5 }}
             whileHover={{ scale: 1.03, y: -4 }}
             whileTap={{ scale: 0.97 }}
-            onClick={() => setRole("therapist")}
+            onClick={() => navigate("/therapist")}
             className="touch-target rounded-2xl border border-white/40 bg-primary/90 p-6 text-primary-foreground shadow-[0_18px_50px_rgba(77,170,206,0.28)] backdrop-blur-md sm:p-8"
           >
             <div className="mb-4 text-5xl">🧑‍⚕️</div>
@@ -33,7 +33,7 @@ export default function RoleSelector() {
             transition={{ delay: 0.3, duration: 0.5 }}
             whileHover={{ scale: 1.03, y: -4 }}
             whileTap={{ scale: 0.97 }}
-            onClick={() => setRole("parent")}
+            onClick={() => navigate("/family")}
             className="touch-target rounded-2xl border border-white/40 bg-secondary/90 p-6 text-secondary-foreground shadow-[0_18px_50px_rgba(102,190,132,0.26)] backdrop-blur-md sm:p-8"
           >
             <div className="mb-4 text-5xl">👪</div>

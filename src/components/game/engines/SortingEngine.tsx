@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GameConfig } from "@/data/games";
+import { shuffleItems } from "@/lib/shuffle";
+import { getAdaptiveGameConfig } from "@/lib/gameProgression";
 
 interface Props {
   game: GameConfig;
@@ -44,16 +46,29 @@ function normalizeCategory(value: string) {
   return value.toLowerCase().replace(/\s+/g, "-");
 }
 
+function createItems(normalizedCategories: string[], perCategory: number) {
+  return shuffleItems(
+    normalizedCategories.flatMap((category, categoryIndex) =>
+      (itemMap[category] || ["⭐", "🎈", "🧩", "🎨"]).slice(0, perCategory).map((emoji) => ({ emoji, categoryIndex }))
+    )
+  );
+}
+
 export default function SortingEngine({ game, onInteraction, onComplete }: Props) {
   const categories = (game.config.categories as string[] | undefined) || ["Group A", "Group B"];
-  const normalized = categories.map(normalizeCategory);
-  const items = useMemo(
-    () => normalized.flatMap((category, categoryIndex) => (itemMap[category] || ["⭐", "🎈", "🧩", "🎨"]).map((emoji) => ({ emoji, categoryIndex }))).sort(() => Math.random() - 0.5),
-    [normalized]
-  );
-
+  const { supportLevel, readinessStage, personalized } = getAdaptiveGameConfig(game);
+  const normalized = useMemo(() => categories.map(normalizeCategory), [categories]);
+  const categoriesKey = normalized.join("|");
+  const itemsPerCategory = personalized && supportLevel === "high" ? 2 : 4;
+  const [items, setItems] = useState(() => createItems(normalized, itemsPerCategory));
   const [index, setIndex] = useState(0);
   const [correct, setCorrect] = useState(0);
+
+  useEffect(() => {
+    setItems(createItems(normalized, itemsPerCategory));
+    setIndex(0);
+    setCorrect(0);
+  }, [categoriesKey, itemsPerCategory, normalized]);
 
   const current = items[index];
 
@@ -76,7 +91,8 @@ export default function SortingEngine({ game, onInteraction, onComplete }: Props
 
   return (
     <div className="max-w-lg mx-auto text-center">
-      <p className="text-sm text-muted-foreground mb-4">Sort item {index + 1} of {items.length}</p>
+      <p className="mb-3 text-sm text-muted-foreground">Sort item {index + 1} of {items.length}</p>
+      <p className="mb-4 text-xs text-muted-foreground">Support: {supportLevel} · Stage: {readinessStage}</p>
       <div className="bg-muted rounded-2xl p-8 mb-4">
         <div className="text-7xl mb-5">{current.emoji}</div>
         <div className="grid grid-cols-2 gap-3">

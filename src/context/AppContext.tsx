@@ -1,7 +1,28 @@
-import React, { createContext, useCallback, useContext, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Difficulty } from "@/data/games";
+import { AuthSession, hashSecret, loadSession, saveSession, verifySecret } from "@/lib/auth";
+import { AdminUser, AppDataSnapshot, TherapistUser, createAuditEntry, loadAppData, saveAppData } from "@/lib/backend";
+import { buildSkillScoresFromResult, emptySkillProfile, mergeSkillProfiles } from "@/lib/skills";
 
 export type AssignmentType = "homework" | "classwork";
+export type SkillDomain =
+  | "social"
+  | "communication"
+  | "attention"
+  | "motor"
+  | "sequencing"
+  | "emotional-regulation"
+  | "daily-living"
+  | "academic";
+
+export interface TherapyGoal {
+  id: string;
+  title: string;
+  domain: SkillDomain;
+  targetLevel: number;
+  status: "active" | "paused" | "achieved";
+  notes: string;
+}
 
 export interface FamilyMember {
   id: string;
@@ -9,7 +30,26 @@ export interface FamilyMember {
   relationship: "parent" | "sibling" | "grandparent" | "aunt-uncle" | "other";
   avatar: string;
   phoneNumber: string;
-  password: string;
+  passwordHash: string;
+  credentialStatus: "active" | "pending";
+  invitedAt: string;
+  inviteCode?: string;
+  lastCredentialUpdateAt?: string;
+  lastSignedInAt?: string;
+}
+
+export interface ClinicalRatings {
+  communicationSupport: number;
+  regulationSupport: number;
+  transitionSupport: number;
+  promptDependence: number;
+  reinforcementResponse: number;
+}
+
+export interface ClinicalRatingEntry extends ClinicalRatings {
+  recordedAt: string;
+  recordedBy?: string;
+  notes?: string;
 }
 
 export interface Child {
@@ -20,6 +60,49 @@ export interface Child {
   notes: string;
   diagnosis?: string;
   familyMembers: FamilyMember[];
+  personalizationProfile: {
+    preferredStyle: "visual" | "hands-on" | "verbal" | "mixed";
+    communicationLevel: "emerging" | "gestures" | "single-words" | "phrases" | "conversational";
+    reinforcementType: "visual-praise" | "tokens" | "movement-breaks" | "preferred-items" | "social-praise";
+    promptLevel: "full-physical" | "partial-physical" | "modeling" | "gestural" | "verbal" | "independent";
+    transitionDifficulty: "low" | "moderate" | "high";
+    interests: string[];
+    strengths: string[];
+    supportNeeds: string[];
+    sensoryPreferences: string[];
+    triggerPatterns: string[];
+    regulationSupports: string[];
+    clinicalRatings: ClinicalRatings;
+    clinicalRatingHistory: ClinicalRatingEntry[];
+  };
+  therapyGoals: TherapyGoal[];
+  skillProfile: Record<SkillDomain, number>;
+  progressionSettings: {
+    autoAdvance: boolean;
+    approvalRequired: boolean;
+    recommendedDifficulty: Difficulty;
+    maxDifficulty: Difficulty;
+  };
+}
+
+function createClinicalRatings(ratings?: Partial<ClinicalRatings>): ClinicalRatings {
+  return {
+    communicationSupport: 3,
+    regulationSupport: 3,
+    transitionSupport: 3,
+    promptDependence: 3,
+    reinforcementResponse: 3,
+    ...ratings,
+  };
+}
+
+function createClinicalRatingEntry(recordedAt: string, ratings?: Partial<ClinicalRatings>, notes?: string, recordedBy?: string): ClinicalRatingEntry {
+  return {
+    ...createClinicalRatings(ratings),
+    recordedAt,
+    notes,
+    recordedBy,
+  };
 }
 
 export interface HomeworkAssignment {
@@ -36,6 +119,23 @@ export interface HomeworkAssignment {
   completedGames: string[];
   results: GameResult[];
   assignedFamilyMemberId?: string;
+  skillFocus: SkillDomain[];
+  supportLevel?: "high" | "moderate" | "light";
+  systemSuggestedDifficulty?: Difficulty;
+  therapistApproval: "pending" | "approved" | "adjusted";
+  approvedAt?: string;
+  approvedBy?: string;
+  monthlyPlan?: {
+    weekNumber: number;
+    objective: string;
+    rationale: string;
+    progressionDecision: "advance" | "hold" | "step-back" | "review";
+    supportLevel: "high" | "moderate" | "light";
+    sessionLengthMinutes: number;
+    adultSupport: "co-play" | "guided practice" | "check-ins";
+    familyGuidance: string[];
+    successMarkers: string[];
+  };
 }
 
 export interface GameResult {
@@ -54,26 +154,75 @@ export interface GameResult {
   frustrationEvents?: number;
   independenceLevel?: number;
   transitionEase?: number;
+  skillScores?: Partial<Record<SkillDomain, number>>;
+}
+
+export interface AuditEntry {
+  id: string;
+  actorRole: "admin" | "therapist" | "parent";
+  actorId: string;
+  action: string;
+  entityType: "child" | "assignment" | "result" | "goal" | "auth" | "credential" | "staff";
+  entityId: string;
+  details: string;
+  createdAt: string;
 }
 
 interface AppState {
-  role: "none" | "therapist" | "parent";
-  setRole: (r: "none" | "therapist" | "parent") => void;
+  role: "none" | "admin" | "therapist" | "parent";
+  setRole: (role: "none" | "admin" | "therapist" | "parent") => void;
+  session: AuthSession | null;
+  adminUsers: AdminUser[];
+  therapistUsers: TherapistUser[];
+  signInAdmin: (email: string, password: string) => boolean;
+  signInTherapist: (email: string, password: string) => boolean;
+  signInFamily: (phoneNumber: string, password: string) => { childId: string; familyMemberId: string } | null;
+  signOut: () => void;
+  addStaffUser: (user: { role: "admin" | "therapist"; name: string; email: string; clinicName: string; password: string }) => void;
   children: Child[];
-  addChild: (c: Omit<Child, "id">) => void;
+  addChild: (child: Omit<Child, "id">) => void;
   removeChild: (id: string) => void;
   updateChild: (id: string, updates: Partial<Child>) => void;
+  issueFamilyInvite: (childId: string, familyMemberId: string) => string | null;
+  resetFamilyCredentials: (childId: string, familyMemberId: string, temporaryPassword: string, activate?: boolean) => boolean;
+  updateGoalStatus: (childId: string, goalId: string, status: TherapyGoal["status"]) => void;
   assignments: HomeworkAssignment[];
-  createAssignment: (a: Omit<HomeworkAssignment, "id" | "createdAt" | "status" | "completedGames" | "results">) => void;
-  completeGame: (assignmentId: string, result: Omit<GameResult, "assignmentId">) => void;
+  createAssignment: (assignment: Omit<HomeworkAssignment, "id" | "createdAt" | "status" | "completedGames" | "results" | "therapistApproval" | "approvedAt" | "approvedBy">) => void;
+  approveAssignment: (assignmentId: string, approval: "approved" | "adjusted", difficulty?: Difficulty) => void;
+  completeGame: (assignmentId: string, result: Omit<GameResult, "assignmentId" | "skillScores">) => void;
   removeGameFromAssignment: (assignmentId: string, gameId: string) => void;
   selectedChildId: string | null;
   setSelectedChildId: (id: string | null) => void;
   currentAssignment: HomeworkAssignment | null;
-  setCurrentAssignment: (a: HomeworkAssignment | null) => void;
+  setCurrentAssignment: (assignment: HomeworkAssignment | null) => void;
+  auditLog: AuditEntry[];
 }
 
 const AppContext = createContext<AppState | null>(null);
+
+function createInviteCode() {
+  return `INV-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+}
+
+const defaultAdmins: AdminUser[] = [
+  {
+    id: "admin-1",
+    clinicName: "Playground Life Clinic",
+    name: "Avery Cole",
+    email: "admin@playgroundlife.app",
+    passwordHash: hashSecret("admin123"),
+  },
+];
+
+const defaultTherapists: TherapistUser[] = [
+  {
+    id: "therapist-1",
+    clinicName: "Playground Life Clinic",
+    name: "Dr. Maya Lane",
+    email: "therapist@playgroundlife.app",
+    passwordHash: hashSecret("therapist123"),
+  },
+];
 
 const defaultChildren: Child[] = [
   {
@@ -81,37 +230,163 @@ const defaultChildren: Child[] = [
     name: "Emma",
     avatar: "👧",
     age: 6,
-    notes: "Prefers visual activities",
+    notes: "Prefers visual activities and benefits from structured transitions.",
     diagnosis: "ASD Level 1",
     familyMembers: [
-      { id: "fm-1", name: "Sarah", relationship: "parent", avatar: "👩", phoneNumber: "555-0101", password: "emma123" },
-      { id: "fm-2", name: "Jake", relationship: "sibling", avatar: "👦", phoneNumber: "555-0102", password: "playtime" },
+      { id: "fm-1", name: "Sarah", relationship: "parent", avatar: "👩", phoneNumber: "555-0101", passwordHash: hashSecret("emma123"), credentialStatus: "active", invitedAt: "2026-04-01T09:00:00.000Z", lastCredentialUpdateAt: "2026-04-01T09:00:00.000Z" },
+      { id: "fm-2", name: "Jake", relationship: "sibling", avatar: "👦", phoneNumber: "555-0102", passwordHash: hashSecret("playtime"), credentialStatus: "active", invitedAt: "2026-04-01T09:00:00.000Z", lastCredentialUpdateAt: "2026-04-01T09:00:00.000Z" },
     ],
+    personalizationProfile: {
+      preferredStyle: "visual",
+      communicationLevel: "phrases",
+      reinforcementType: "visual-praise",
+      promptLevel: "gestural",
+      transitionDifficulty: "moderate",
+      interests: ["animals", "colors", "patterns"],
+      strengths: ["visual matching", "structured routines"],
+      supportNeeds: ["predictable transitions", "short directions"],
+      sensoryPreferences: ["low noise", "visual prompts"],
+      triggerPatterns: ["unexpected transitions", "too many verbal instructions"],
+      regulationSupports: ["first-then boards", "deep breaths", "visual countdowns"],
+      clinicalRatings: createClinicalRatings({
+        communicationSupport: 3,
+        regulationSupport: 2,
+        transitionSupport: 3,
+        promptDependence: 3,
+        reinforcementResponse: 2,
+      }),
+      clinicalRatingHistory: [
+        createClinicalRatingEntry("2026-04-01T09:00:00.000Z", {
+          communicationSupport: 4,
+          regulationSupport: 3,
+          transitionSupport: 4,
+          promptDependence: 4,
+          reinforcementResponse: 3,
+        }, "Initial intake baseline"),
+        createClinicalRatingEntry("2026-04-05T09:00:00.000Z", {
+          communicationSupport: 3,
+          regulationSupport: 2,
+          transitionSupport: 3,
+          promptDependence: 3,
+          reinforcementResponse: 2,
+        }, "Responding well to visual prompts and structured routines"),
+      ],
+    },
+    therapyGoals: [
+      { id: "goal-1", title: "Increase turn-taking in shared play", domain: "social", targetLevel: 80, status: "active", notes: "Use playground and social games." },
+      { id: "goal-2", title: "Improve independent task completion", domain: "attention", targetLevel: 75, status: "active", notes: "Reduce prompts gradually." },
+    ],
+    skillProfile: { ...emptySkillProfile(), social: 58, attention: 62, sequencing: 55 },
+    progressionSettings: { autoAdvance: true, approvalRequired: true, recommendedDifficulty: "easy", maxDifficulty: "hard" },
   },
   {
     id: "child-2",
     name: "Liam",
     avatar: "👦",
     age: 8,
-    notes: "Good with patterns",
+    notes: "Good with patterns and sequencing. Ready for stretch tasks when motivation stays high.",
     diagnosis: "ASD Level 2",
     familyMembers: [
-      { id: "fm-3", name: "Maria", relationship: "parent", avatar: "👩", phoneNumber: "555-0201", password: "liam123" },
-      { id: "fm-4", name: "Grandma Rose", relationship: "grandparent", avatar: "👵", phoneNumber: "555-0202", password: "rosehome" },
+      { id: "fm-3", name: "Maria", relationship: "parent", avatar: "👩", phoneNumber: "555-0201", passwordHash: hashSecret("liam123"), credentialStatus: "active", invitedAt: "2026-04-01T09:00:00.000Z", lastCredentialUpdateAt: "2026-04-01T09:00:00.000Z" },
+      { id: "fm-4", name: "Grandma Rose", relationship: "grandparent", avatar: "👵", phoneNumber: "555-0202", passwordHash: hashSecret("rosehome"), credentialStatus: "active", invitedAt: "2026-04-01T09:00:00.000Z", lastCredentialUpdateAt: "2026-04-01T09:00:00.000Z" },
     ],
+    personalizationProfile: {
+      preferredStyle: "hands-on",
+      communicationLevel: "phrases",
+      reinforcementType: "preferred-items",
+      promptLevel: "verbal",
+      transitionDifficulty: "moderate",
+      interests: ["patterns", "building", "sequencing"],
+      strengths: ["logic tasks", "sorting"],
+      supportNeeds: ["motivation boosts", "clear end goals"],
+      sensoryPreferences: ["movement breaks"],
+      triggerPatterns: ["loss of preferred activity", "unclear goal"],
+      regulationSupports: ["choice boards", "short movement breaks"],
+      clinicalRatings: createClinicalRatings({
+        communicationSupport: 2,
+        regulationSupport: 3,
+        transitionSupport: 3,
+        promptDependence: 2,
+        reinforcementResponse: 3,
+      }),
+      clinicalRatingHistory: [
+        createClinicalRatingEntry("2026-04-01T09:00:00.000Z", {
+          communicationSupport: 3,
+          regulationSupport: 3,
+          transitionSupport: 3,
+          promptDependence: 3,
+          reinforcementResponse: 4,
+        }, "Initial intake baseline"),
+        createClinicalRatingEntry("2026-04-05T09:00:00.000Z", {
+          communicationSupport: 2,
+          regulationSupport: 3,
+          transitionSupport: 3,
+          promptDependence: 2,
+          reinforcementResponse: 3,
+        }, "Prompt dependence decreasing during sequencing tasks"),
+      ],
+    },
+    therapyGoals: [
+      { id: "goal-3", title: "Generalize pattern recognition to daily routines", domain: "sequencing", targetLevel: 85, status: "active", notes: "Mix routine and pattern games." },
+      { id: "goal-4", title: "Build flexible social responses in multiplayer play", domain: "social", targetLevel: 70, status: "active", notes: "Use clinic sessions with peers." },
+    ],
+    skillProfile: { ...emptySkillProfile(), sequencing: 74, academic: 71, social: 54 },
+    progressionSettings: { autoAdvance: true, approvalRequired: true, recommendedDifficulty: "medium", maxDifficulty: "hard" },
   },
   {
     id: "child-3",
     name: "Sofia",
     avatar: "👧",
     age: 5,
-    notes: "Loves animals",
+    notes: "Loves animals and responds best to playful visual reinforcement.",
     diagnosis: "ASD Level 1",
     familyMembers: [
-      { id: "fm-5", name: "Ana", relationship: "parent", avatar: "👩", phoneNumber: "555-0301", password: "sofia123" },
-      { id: "fm-6", name: "Mia", relationship: "sibling", avatar: "👧", phoneNumber: "555-0302", password: "animalfun" },
-      { id: "fm-7", name: "Uncle Carlos", relationship: "aunt-uncle", avatar: "👨", phoneNumber: "555-0303", password: "carlosplay" },
+      { id: "fm-5", name: "Ana", relationship: "parent", avatar: "👩", phoneNumber: "555-0301", passwordHash: hashSecret("sofia123"), credentialStatus: "active", invitedAt: "2026-04-01T09:00:00.000Z", lastCredentialUpdateAt: "2026-04-01T09:00:00.000Z" },
+      { id: "fm-6", name: "Mia", relationship: "sibling", avatar: "👧", phoneNumber: "555-0302", passwordHash: hashSecret("animalfun"), credentialStatus: "active", invitedAt: "2026-04-01T09:00:00.000Z", lastCredentialUpdateAt: "2026-04-01T09:00:00.000Z" },
+      { id: "fm-7", name: "Uncle Carlos", relationship: "aunt-uncle", avatar: "👨", phoneNumber: "555-0303", passwordHash: hashSecret("carlosplay"), credentialStatus: "active", invitedAt: "2026-04-01T09:00:00.000Z", lastCredentialUpdateAt: "2026-04-01T09:00:00.000Z" },
     ],
+    personalizationProfile: {
+      preferredStyle: "visual",
+      communicationLevel: "single-words",
+      reinforcementType: "social-praise",
+      promptLevel: "modeling",
+      transitionDifficulty: "high",
+      interests: ["animals", "playful stories"],
+      strengths: ["shared play", "imitation"],
+      supportNeeds: ["emotion coaching", "family co-play"],
+      sensoryPreferences: ["gentle sounds", "bright visuals"],
+      triggerPatterns: ["task ending too abruptly", "frustrating mismatch"],
+      regulationSupports: ["co-regulation", "emotion labels", "favorite animal visuals"],
+      clinicalRatings: createClinicalRatings({
+        communicationSupport: 4,
+        regulationSupport: 4,
+        transitionSupport: 5,
+        promptDependence: 4,
+        reinforcementResponse: 3,
+      }),
+      clinicalRatingHistory: [
+        createClinicalRatingEntry("2026-04-01T09:00:00.000Z", {
+          communicationSupport: 5,
+          regulationSupport: 4,
+          transitionSupport: 5,
+          promptDependence: 5,
+          reinforcementResponse: 4,
+        }, "Initial intake baseline"),
+        createClinicalRatingEntry("2026-04-05T09:00:00.000Z", {
+          communicationSupport: 4,
+          regulationSupport: 4,
+          transitionSupport: 5,
+          promptDependence: 4,
+          reinforcementResponse: 3,
+        }, "Improved engagement with co-regulation and animal visuals"),
+      ],
+    },
+    therapyGoals: [
+      { id: "goal-5", title: "Sustain shared play with family members", domain: "social", targetLevel: 78, status: "active", notes: "Animal-themed matching works well." },
+      { id: "goal-6", title: "Expand emotional labeling", domain: "communication", targetLevel: 72, status: "active", notes: "Use emotion recognition and social stories." },
+    ],
+    skillProfile: { ...emptySkillProfile(), social: 61, communication: 57, attention: 59 },
+    progressionSettings: { autoAdvance: true, approvalRequired: true, recommendedDifficulty: "easy", maxDifficulty: "medium" },
   },
 ];
 
@@ -130,6 +405,11 @@ const defaultAssignments: HomeworkAssignment[] = [
     completedGames: [],
     results: [],
     assignedFamilyMemberId: "fm-1",
+    skillFocus: ["social", "attention"],
+    systemSuggestedDifficulty: "easy",
+    therapistApproval: "approved",
+    approvedAt: "2026-04-03T09:00:00.000Z",
+    approvedBy: "therapist-1",
   },
   {
     id: "hw-2",
@@ -159,8 +439,14 @@ const defaultAssignments: HomeworkAssignment[] = [
         frustrationEvents: 1,
         independenceLevel: 7,
         transitionEase: 8,
+        skillScores: { sequencing: 85, academic: 76 },
       },
     ],
+    skillFocus: ["sequencing", "attention", "academic"],
+    systemSuggestedDifficulty: "medium",
+    therapistApproval: "approved",
+    approvedAt: "2026-04-02T09:00:00.000Z",
+    approvedBy: "therapist-1",
   },
   {
     id: "hw-3",
@@ -191,6 +477,7 @@ const defaultAssignments: HomeworkAssignment[] = [
         frustrationEvents: 0,
         independenceLevel: 8,
         transitionEase: 9,
+        skillScores: { social: 82, attention: 90 },
       },
       {
         gameId: "game-008",
@@ -208,9 +495,15 @@ const defaultAssignments: HomeworkAssignment[] = [
         frustrationEvents: 2,
         independenceLevel: 6,
         transitionEase: 7,
+        skillScores: { attention: 75, social: 70 },
       },
     ],
     assignedFamilyMemberId: "fm-5",
+    skillFocus: ["social", "attention"],
+    systemSuggestedDifficulty: "easy",
+    therapistApproval: "approved",
+    approvedAt: "2026-04-01T09:00:00.000Z",
+    approvedBy: "therapist-1",
   },
   {
     id: "cw-1",
@@ -225,6 +518,11 @@ const defaultAssignments: HomeworkAssignment[] = [
     status: "pending",
     completedGames: [],
     results: [],
+    skillFocus: ["social", "communication"],
+    systemSuggestedDifficulty: "easy",
+    therapistApproval: "approved",
+    approvedAt: "2026-04-04T09:00:00.000Z",
+    approvedBy: "therapist-1",
   },
   {
     id: "cw-2",
@@ -255,101 +553,453 @@ const defaultAssignments: HomeworkAssignment[] = [
         frustrationEvents: 1,
         independenceLevel: 6,
         transitionEase: 7,
+        skillScores: { social: 82, communication: 78 },
       },
     ],
+    skillFocus: ["social", "communication"],
+    systemSuggestedDifficulty: "medium",
+    therapistApproval: "approved",
+    approvedAt: "2026-04-04T09:00:00.000Z",
+    approvedBy: "therapist-1",
   },
 ];
 
+const defaultAuditLog: AuditEntry[] = [
+  createAuditEntry("seeded_data", { role: "admin", userId: "admin-1", displayName: "Avery Cole" }, "auth", "seed", "Seed clinic data loaded"),
+];
+
+const defaultSnapshot: AppDataSnapshot = {
+  admins: defaultAdmins,
+  therapists: defaultTherapists,
+  children: defaultChildren,
+  assignments: defaultAssignments,
+  auditLog: defaultAuditLog,
+};
+
+function normalizeChild(child: Child): Child {
+  const fallbackChild = defaultChildren.find((entry) => entry.id === child.id);
+  const fallbackRatings = createClinicalRatings(fallbackChild?.personalizationProfile.clinicalRatings);
+  const rawProfile = child.personalizationProfile || {};
+  const normalizedRatings = createClinicalRatings({
+    ...fallbackRatings,
+    ...(rawProfile.clinicalRatings || {}),
+  });
+  const normalizedHistory = Array.isArray(rawProfile.clinicalRatingHistory) && rawProfile.clinicalRatingHistory.length > 0
+    ? rawProfile.clinicalRatingHistory.map((entry) => ({
+        ...createClinicalRatingEntry(entry.recordedAt || new Date().toISOString(), fallbackRatings, entry.notes, entry.recordedBy),
+        ...entry,
+        ...createClinicalRatings(entry),
+      }))
+    : [
+        createClinicalRatingEntry(
+          fallbackChild?.personalizationProfile.clinicalRatingHistory?.[0]?.recordedAt || new Date().toISOString(),
+          normalizedRatings,
+          "Baseline created from existing child profile"
+        ),
+      ];
+
+  const normalizedProfile = {
+    preferredStyle: fallbackChild?.personalizationProfile.preferredStyle || "mixed",
+    communicationLevel: fallbackChild?.personalizationProfile.communicationLevel || "phrases",
+    reinforcementType: fallbackChild?.personalizationProfile.reinforcementType || "social-praise",
+    promptLevel: fallbackChild?.personalizationProfile.promptLevel || "verbal",
+    transitionDifficulty: fallbackChild?.personalizationProfile.transitionDifficulty || "moderate",
+    interests: fallbackChild?.personalizationProfile.interests || [],
+    strengths: fallbackChild?.personalizationProfile.strengths || [],
+    supportNeeds: fallbackChild?.personalizationProfile.supportNeeds || [],
+    sensoryPreferences: fallbackChild?.personalizationProfile.sensoryPreferences || [],
+    triggerPatterns: fallbackChild?.personalizationProfile.triggerPatterns || [],
+    regulationSupports: fallbackChild?.personalizationProfile.regulationSupports || [],
+    ...rawProfile,
+    clinicalRatings: normalizedRatings,
+    clinicalRatingHistory: normalizedHistory,
+  };
+
+  return {
+    ...child,
+    familyMembers: child.familyMembers.map((familyMember) => ({
+      invitedAt: new Date().toISOString(),
+      credentialStatus: "active",
+      ...familyMember,
+    })),
+    personalizationProfile: normalizedProfile,
+    therapyGoals: child.therapyGoals || fallbackChild?.therapyGoals || [],
+    skillProfile: {
+      ...emptySkillProfile(),
+      ...(fallbackChild?.skillProfile || {}),
+      ...(child.skillProfile || {}),
+    },
+    progressionSettings: {
+      autoAdvance: true,
+      approvalRequired: true,
+      recommendedDifficulty: fallbackChild?.progressionSettings.recommendedDifficulty || "easy",
+      maxDifficulty: fallbackChild?.progressionSettings.maxDifficulty || "hard",
+      ...(child.progressionSettings || {}),
+    },
+  };
+}
+
+function normalizeSnapshot(snapshot: AppDataSnapshot): AppDataSnapshot {
+  return {
+    ...snapshot,
+    admins: snapshot.admins?.length ? snapshot.admins : defaultAdmins,
+    therapists: snapshot.therapists?.length ? snapshot.therapists : defaultTherapists,
+    children: (snapshot.children || defaultChildren).map(normalizeChild),
+    assignments: snapshot.assignments || defaultAssignments,
+    auditLog: snapshot.auditLog || defaultAuditLog,
+  };
+}
+
 export function AppProvider({ children: childrenNodes }: { children: React.ReactNode }) {
-  const [role, setRole] = useState<"none" | "therapist" | "parent">("none");
-  const [children, setChildren] = useState<Child[]>(defaultChildren);
-  const [assignments, setAssignments] = useState<HomeworkAssignment[]>(defaultAssignments);
+  const [snapshot, setSnapshot] = useState<AppDataSnapshot>(() => normalizeSnapshot(loadAppData(defaultSnapshot)));
+  const [role, setRole] = useState<"none" | "admin" | "therapist" | "parent">("none");
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [currentAssignment, setCurrentAssignment] = useState<HomeworkAssignment | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(() => loadSession());
+
+  useEffect(() => {
+    saveAppData(snapshot);
+  }, [snapshot]);
+
+  useEffect(() => {
+    saveSession(session);
+  }, [session]);
+
+  useEffect(() => {
+    if (session?.role === "admin") setRole("admin");
+    if (session?.role === "therapist") setRole("therapist");
+    if (session?.role === "parent") {
+      setRole("parent");
+      if (session.childId) setSelectedChildId(session.childId);
+    }
+  }, [session]);
+
+  const persist = useCallback((updater: (current: AppDataSnapshot) => AppDataSnapshot) => {
+    setSnapshot((current) => updater(current));
+  }, []);
+
+  const appendAudit = useCallback((current: AppDataSnapshot, entry: AuditEntry) => ({
+    ...current,
+    auditLog: [entry, ...current.auditLog].slice(0, 300),
+  }), []);
+
+  const signInAdmin = useCallback((email: string, password: string) => {
+    const admin = snapshot.admins.find((entry) => entry.email.toLowerCase() === email.trim().toLowerCase());
+    if (!admin || !verifySecret(admin.passwordHash, password)) return false;
+
+    const nextSession: AuthSession = {
+      role: "admin",
+      userId: admin.id,
+      displayName: admin.name,
+    };
+
+    setSession(nextSession);
+    setRole("admin");
+    persist((current) => appendAudit(current, createAuditEntry("admin_sign_in", nextSession, "auth", admin.id, `${admin.name} signed in`)));
+    return true;
+  }, [appendAudit, persist, snapshot.admins]);
+
+  const signInTherapist = useCallback((email: string, password: string) => {
+    const therapist = snapshot.therapists.find((entry) => entry.email.toLowerCase() === email.trim().toLowerCase());
+    if (!therapist || !verifySecret(therapist.passwordHash, password)) return false;
+
+    const nextSession: AuthSession = {
+      role: "therapist",
+      userId: therapist.id,
+      displayName: therapist.name,
+    };
+
+    setSession(nextSession);
+    setRole("therapist");
+    persist((current) => appendAudit(current, createAuditEntry("therapist_sign_in", nextSession, "auth", therapist.id, `${therapist.name} signed in`)));
+    return true;
+  }, [appendAudit, persist, snapshot.therapists]);
+
+  const signInFamily = useCallback((phoneNumber: string, password: string) => {
+    const normalizedPhone = phoneNumber.replace(/\D/g, "");
+    const familyEntry = snapshot.children
+      .flatMap((child) => child.familyMembers.map((familyMember) => ({ child, familyMember })))
+      .find(({ familyMember }) =>
+        familyMember.credentialStatus === "active" &&
+        familyMember.phoneNumber.replace(/\D/g, "") === normalizedPhone &&
+        verifySecret(familyMember.passwordHash, password)
+      );
+
+    if (!familyEntry) return null;
+
+    const nextSession: AuthSession = {
+      role: "parent",
+      userId: familyEntry.familyMember.id,
+      displayName: familyEntry.familyMember.name,
+      childId: familyEntry.child.id,
+      familyMemberId: familyEntry.familyMember.id,
+    };
+
+    setSession(nextSession);
+    setRole("parent");
+    setSelectedChildId(familyEntry.child.id);
+    persist((current) => {
+      const updatedChildren = current.children.map((child) => child.id !== familyEntry.child.id ? child : ({
+        ...child,
+        familyMembers: child.familyMembers.map((familyMember) =>
+          familyMember.id !== familyEntry.familyMember.id ? familyMember : { ...familyMember, lastSignedInAt: new Date().toISOString() }
+        ),
+      }));
+
+      return appendAudit(
+        { ...current, children: updatedChildren },
+        createAuditEntry("family_sign_in", nextSession, "auth", familyEntry.familyMember.id, `${familyEntry.familyMember.name} signed in for ${familyEntry.child.name}`)
+      );
+    });
+
+    return { childId: familyEntry.child.id, familyMemberId: familyEntry.familyMember.id };
+  }, [appendAudit, persist, snapshot.children]);
+
+  const signOut = useCallback(() => {
+    const currentSession = session;
+    if (currentSession) {
+      persist((current) => appendAudit(current, createAuditEntry("sign_out", currentSession, "auth", currentSession.userId, `${currentSession.displayName} signed out`)));
+    }
+    setSession(null);
+    setRole("none");
+    setSelectedChildId(null);
+    setCurrentAssignment(null);
+  }, [appendAudit, persist, session]);
+
+  const addStaffUser = useCallback((user: { role: "admin" | "therapist"; name: string; email: string; clinicName: string; password: string }) => {
+    persist((current) => {
+      const nextUser = {
+        id: `${user.role}-${Date.now()}`,
+        clinicName: user.clinicName,
+        name: user.name,
+        email: user.email,
+        passwordHash: hashSecret(user.password),
+      };
+
+      const updated = user.role === "admin"
+        ? { ...current, admins: [...current.admins, nextUser as AdminUser] }
+        : { ...current, therapists: [...current.therapists, nextUser as TherapistUser] };
+
+      return appendAudit(updated, createAuditEntry("staff_added", session, "staff", nextUser.id, `Added ${user.role} user ${user.name}`));
+    });
+  }, [appendAudit, persist, session]);
 
   const addChild = useCallback((child: Omit<Child, "id">) => {
-    setChildren((prev) => [...prev, { ...child, id: `child-${Date.now()}` }]);
-  }, []);
+    persist((current) => {
+      const nextChild: Child = { ...child, id: `child-${Date.now()}` };
+      const updated = { ...current, children: [...current.children, nextChild] };
+      return appendAudit(updated, createAuditEntry("child_created", session, "child", nextChild.id, `Created child profile for ${nextChild.name}`));
+    });
+  }, [appendAudit, persist, session]);
 
   const removeChild = useCallback((id: string) => {
-    setChildren((prev) => prev.filter((child) => child.id !== id));
-  }, []);
+    setSelectedChildId((current) => (current === id ? null : current));
+    setCurrentAssignment((current) => (current?.childId === id ? null : current));
+    persist((current) => {
+      const child = current.children.find((entry) => entry.id === id);
+      const updated = {
+        ...current,
+        children: current.children.filter((entry) => entry.id !== id),
+        assignments: current.assignments.filter((assignment) => assignment.childId !== id),
+      };
+      return appendAudit(updated, createAuditEntry("child_removed", session, "child", id, `Removed child profile for ${child?.name || id}`));
+    });
+  }, [appendAudit, persist, session]);
 
   const updateChild = useCallback((id: string, updates: Partial<Child>) => {
-    setChildren((prev) => prev.map((child) => (child.id === id ? { ...child, ...updates } : child)));
-  }, []);
+    persist((current) => {
+      const updatedChildren = current.children.map((child) => child.id === id ? normalizeChild({ ...child, ...updates }) : child);
+      const nextChild = updatedChildren.find((child) => child.id === id);
+      return appendAudit({ ...current, children: updatedChildren }, createAuditEntry("child_updated", session, "child", id, `Updated child profile for ${nextChild?.name || id}`));
+    });
+  }, [appendAudit, persist, session]);
 
-  const createAssignment = useCallback(
-    (assignment: Omit<HomeworkAssignment, "id" | "createdAt" | "status" | "completedGames" | "results">) => {
-      const prefix = assignment.type === "classwork" ? "cw" : "hw";
-      setAssignments((prev) => [
-        ...prev,
-        {
-          ...assignment,
-          id: `${prefix}-${Date.now()}`,
-          createdAt: new Date().toISOString().slice(0, 10),
-          status: "pending",
-          completedGames: [],
-          results: [],
-        },
-      ]);
-    },
-    []
-  );
+  const issueFamilyInvite = useCallback((childId: string, familyMemberId: string) => {
+    const inviteCode = createInviteCode();
 
-  const completeGame = useCallback((assignmentId: string, result: Omit<GameResult, "assignmentId">) => {
-    setAssignments((prev) =>
-      prev.map((assignment) => {
+    persist((current) => {
+      const updatedChildren = current.children.map((child) => child.id !== childId ? child : ({
+        ...child,
+        familyMembers: child.familyMembers.map((familyMember) =>
+          familyMember.id !== familyMemberId
+            ? familyMember
+            : {
+                ...familyMember,
+                credentialStatus: "pending",
+                invitedAt: new Date().toISOString(),
+                inviteCode,
+              }
+        ),
+      }));
+
+      return appendAudit({ ...current, children: updatedChildren }, createAuditEntry("family_invite_issued", session, "credential", familyMemberId, `Issued onboarding invite for child ${childId}`));
+    });
+
+    return inviteCode;
+  }, [appendAudit, persist, session]);
+
+  const resetFamilyCredentials = useCallback((childId: string, familyMemberId: string, temporaryPassword: string, activate = true) => {
+    let changed = false;
+
+    persist((current) => {
+      const updatedChildren = current.children.map((child) => child.id !== childId ? child : ({
+        ...child,
+        familyMembers: child.familyMembers.map((familyMember) => {
+          if (familyMember.id !== familyMemberId) return familyMember;
+          changed = true;
+          return {
+            ...familyMember,
+            passwordHash: hashSecret(temporaryPassword),
+            credentialStatus: activate ? "active" : "pending",
+            lastCredentialUpdateAt: new Date().toISOString(),
+            inviteCode: activate ? undefined : familyMember.inviteCode,
+          };
+        }),
+      }));
+
+      return appendAudit(
+        { ...current, children: updatedChildren },
+        createAuditEntry("family_credentials_reset", session, "credential", familyMemberId, `Reset family credentials for child ${childId}`)
+      );
+    });
+
+    return changed;
+  }, [appendAudit, persist, session]);
+
+  const updateGoalStatus = useCallback((childId: string, goalId: string, status: TherapyGoal["status"]) => {
+    persist((current) => {
+      const updatedChildren = current.children.map((child) => child.id !== childId ? child : ({
+        ...child,
+        therapyGoals: child.therapyGoals.map((goal) => goal.id !== goalId ? goal : { ...goal, status }),
+      }));
+
+      return appendAudit({ ...current, children: updatedChildren }, createAuditEntry("goal_status_updated", session, "goal", goalId, `Updated goal ${goalId} to ${status}`));
+    });
+  }, [appendAudit, persist, session]);
+
+  const createAssignment = useCallback((assignment: Omit<HomeworkAssignment, "id" | "createdAt" | "status" | "completedGames" | "results" | "therapistApproval" | "approvedAt" | "approvedBy">) => {
+    const prefix = assignment.type === "classwork" ? "cw" : "hw";
+
+    persist((current) => {
+      const nextAssignment: HomeworkAssignment = {
+        ...assignment,
+        id: `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        createdAt: new Date().toISOString().slice(0, 10),
+        status: "pending",
+        completedGames: [],
+        results: [],
+        therapistApproval: current.children.find((child) => child.id === assignment.childId)?.progressionSettings.approvalRequired ? "pending" : "approved",
+      };
+
+      return appendAudit(
+        { ...current, assignments: [...current.assignments, nextAssignment] },
+        createAuditEntry("assignment_created", session, "assignment", nextAssignment.id, `Created ${nextAssignment.type} assignment for child ${nextAssignment.childId}`)
+      );
+    });
+  }, [appendAudit, persist, session]);
+
+  const approveAssignment = useCallback((assignmentId: string, approval: "approved" | "adjusted", difficulty?: Difficulty) => {
+    persist((current) => {
+      const updatedAssignments = current.assignments.map((assignment) => assignment.id !== assignmentId ? assignment : {
+        ...assignment,
+        difficulty: difficulty || assignment.difficulty,
+        therapistApproval: approval,
+        approvedAt: new Date().toISOString(),
+        approvedBy: session?.userId || "therapist-1",
+      });
+      return appendAudit({ ...current, assignments: updatedAssignments }, createAuditEntry("assignment_approved", session, "assignment", assignmentId, `Assignment ${approval}`));
+    });
+  }, [appendAudit, persist, session]);
+
+  const completeGame = useCallback((assignmentId: string, result: Omit<GameResult, "assignmentId" | "skillScores">) => {
+    persist((current) => {
+      const updatedAssignments = current.assignments.map((assignment) => {
         if (assignment.id !== assignmentId) return assignment;
 
-        const completedGames = [...assignment.completedGames, result.gameId];
-        const results = [...assignment.results, { ...result, assignmentId }];
-        const status = completedGames.length >= assignment.gameIds.length ? ("completed" as const) : ("in-progress" as const);
+        const enrichedResult: GameResult = {
+          ...result,
+          assignmentId,
+          skillScores: buildSkillScoresFromResult(result.gameId, result.score),
+        };
+
+        const completedGames = Array.from(new Set([...assignment.completedGames, result.gameId]));
+        const filteredResults = assignment.results.filter((entry) => entry.gameId !== result.gameId);
+        const results = [...filteredResults, enrichedResult];
+        const status = completedGames.length >= assignment.gameIds.length ? "completed" : "in-progress";
 
         return { ...assignment, completedGames, results, status };
-      })
-    );
-  }, []);
+      });
+
+      const updatedChildren = current.children.map((child) => {
+        const childResults = updatedAssignments.filter((assignment) => assignment.childId === child.id).flatMap((assignment) => assignment.results);
+        const nextSkillProfile = mergeSkillProfiles(child.skillProfile, childResults);
+        const updatedGoals = child.therapyGoals.map((goal) => {
+          const domainScore = nextSkillProfile[goal.domain];
+          if (goal.status === "paused") return goal;
+          return { ...goal, status: domainScore >= goal.targetLevel ? "achieved" : "active" };
+        });
+
+        return {
+          ...child,
+          skillProfile: nextSkillProfile,
+          therapyGoals: updatedGoals,
+        };
+      });
+
+      return appendAudit({ ...current, assignments: updatedAssignments, children: updatedChildren }, createAuditEntry("game_completed", session, "result", assignmentId, `Recorded game result for ${result.gameId}`));
+    });
+  }, [appendAudit, persist, session]);
 
   const removeGameFromAssignment = useCallback((assignmentId: string, gameId: string) => {
-    setAssignments((prev) =>
-      prev.flatMap((assignment) => {
+    persist((current) => {
+      const updatedAssignments = current.assignments.flatMap((assignment) => {
         if (assignment.id !== assignmentId) return [assignment];
 
         const gameIds = assignment.gameIds.filter((id) => id !== gameId);
         if (gameIds.length === 0) return [];
 
         const completedGames = assignment.completedGames.filter((id) => id !== gameId);
-        const results = assignment.results.filter((result) => result.gameId !== gameId);
+        const results = assignment.results.filter((entry) => entry.gameId !== gameId);
         const status = completedGames.length === 0 ? "pending" : completedGames.length >= gameIds.length ? "completed" : "in-progress";
 
         return [{ ...assignment, gameIds, completedGames, results, status }];
-      })
-    );
-  }, []);
+      });
 
-  return (
-    <AppContext.Provider
-      value={{
-        role,
-        setRole,
-        children,
-        addChild,
-        removeChild,
-        updateChild,
-        assignments,
-        createAssignment,
-        completeGame,
-        removeGameFromAssignment,
-        selectedChildId,
-        setSelectedChildId,
-        currentAssignment,
-        setCurrentAssignment,
-      }}
-    >
-      {childrenNodes}
-    </AppContext.Provider>
-  );
+      return appendAudit({ ...current, assignments: updatedAssignments }, createAuditEntry("assignment_game_removed", session, "assignment", assignmentId, `Removed ${gameId} from assignment`));
+    });
+  }, [appendAudit, persist, session]);
+
+  const value = useMemo<AppState>(() => ({
+    role,
+    setRole,
+    session,
+    adminUsers: snapshot.admins,
+    therapistUsers: snapshot.therapists,
+    signInAdmin,
+    signInTherapist,
+    signInFamily,
+    signOut,
+    addStaffUser,
+    children: snapshot.children,
+    addChild,
+    removeChild,
+    updateChild,
+    issueFamilyInvite,
+    resetFamilyCredentials,
+    updateGoalStatus,
+    assignments: snapshot.assignments,
+    createAssignment,
+    approveAssignment,
+    completeGame,
+    removeGameFromAssignment,
+    selectedChildId,
+    setSelectedChildId,
+    currentAssignment,
+    setCurrentAssignment,
+    auditLog: snapshot.auditLog,
+  }), [addChild, addStaffUser, approveAssignment, completeGame, createAssignment, currentAssignment, issueFamilyInvite, removeChild, removeGameFromAssignment, resetFamilyCredentials, role, selectedChildId, session, signInAdmin, signInFamily, signInTherapist, signOut, snapshot, updateChild, updateGoalStatus]);
+
+  return <AppContext.Provider value={value}>{childrenNodes}</AppContext.Provider>;
 }
 
 export function useApp() {

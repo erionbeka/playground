@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { GameConfig } from "@/data/games";
+import { shuffleItems } from "@/lib/shuffle";
+import { getAdaptiveGameConfig } from "@/lib/gameProgression";
 
 interface Props {
   game: GameConfig;
@@ -22,6 +24,7 @@ const emojiSets: Record<string, string[]> = {
 };
 
 export default function MatchingEngine({ game, onInteraction, onComplete }: Props) {
+  const { supportLevel, readinessStage } = getAdaptiveGameConfig(game);
   const pairs = (game.config.pairs as number) || 4;
   const theme = String(game.config.theme || "default");
   const emojis = emojiSets[theme] || emojiSets.default;
@@ -34,9 +37,9 @@ export default function MatchingEngine({ game, onInteraction, onComplete }: Prop
 
   useEffect(() => {
     const picked = emojis.slice(0, pairs);
-    const deck = [...picked, ...picked]
-      .map((emoji, index) => ({ id: index, emoji, flipped: false, matched: false }))
-      .sort(() => Math.random() - 0.5);
+    const deck = shuffleItems(
+      [...picked, ...picked].map((emoji, index) => ({ id: index, emoji, flipped: false, matched: false }))
+    );
 
     setCards(deck);
     setSelected([]);
@@ -81,7 +84,7 @@ export default function MatchingEngine({ game, onInteraction, onComplete }: Prop
         });
         setSelected([]);
         setResolving(false);
-      }, 500);
+      }, supportLevel === "high" ? 650 : 500);
       return;
     }
 
@@ -93,14 +96,14 @@ export default function MatchingEngine({ game, onInteraction, onComplete }: Prop
       );
       setSelected([]);
       setResolving(false);
-    }, 800);
+    }, supportLevel === "high" ? 1000 : 800);
   };
 
   return (
     <div className="mx-auto max-w-lg">
       <div className="mb-4 text-center">
         <p className="text-sm text-muted-foreground">
-          Matched: {matchedCount}/{pairs} · Moves: {moves}
+          Matched: {matchedCount}/{pairs} · Moves: {moves} · Support: {supportLevel} · Stage: {readinessStage}
         </p>
       </div>
 

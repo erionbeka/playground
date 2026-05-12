@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { allGames, categoryMeta, GameCategory, Difficulty } from "@/data/games";
 import { motion, AnimatePresence } from "framer-motion";
+import { getGameSkillDomains } from "@/lib/skills";
 
 const categories = Object.entries(categoryMeta) as [GameCategory, typeof categoryMeta[GameCategory]][];
 
@@ -33,6 +34,7 @@ export default function ClinicSession() {
 
   const handleAssign = () => {
     if (selectedChildren.length === 0 || selectedGames.length === 0) return;
+    const skillFocus = Array.from(new Set(selectedGames.flatMap((gameId) => getGameSkillDomains(gameId))));
     selectedChildren.forEach((childId) => {
       createAssignment({
         childId,
@@ -42,6 +44,7 @@ export default function ClinicSession() {
         mode,
         notes,
         dueDate: new Date().toISOString().slice(0, 10),
+        skillFocus: skillFocus.length > 0 ? skillFocus : ["social", "communication"],
       });
     });
     setSelectedGames([]);

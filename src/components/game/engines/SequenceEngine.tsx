@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { GameConfig } from "@/data/games";
 import { motion } from "framer-motion";
+import { getAdaptiveGameConfig } from "@/lib/gameProgression";
 
 interface Props {
   game: GameConfig;
@@ -28,6 +29,7 @@ const themeSymbols: Record<string, string[]> = {
 };
 
 export default function SequenceEngine({ game, onInteraction, onComplete }: Props) {
+  const { supportLevel, readinessStage } = getAdaptiveGameConfig(game);
   const length = Number(game.config.length || game.config.steps || 4);
   const theme = String(game.config.theme || "default");
   const base = themeSymbols[theme] || themeSymbols.default;
@@ -46,10 +48,10 @@ export default function SequenceEngine({ game, onInteraction, onComplete }: Prop
 
     const timer = window.setTimeout(() => {
       setFlashIndex((value) => value + 1);
-    }, 700);
+    }, supportLevel === "high" ? 850 : 700);
 
     return () => window.clearTimeout(timer);
-  }, [flashIndex, phase, sequence.length]);
+  }, [flashIndex, phase, sequence.length, supportLevel]);
 
   const handlePick = (symbol: string) => {
     if (phase !== "repeat") return;
@@ -67,14 +69,15 @@ export default function SequenceEngine({ game, onInteraction, onComplete }: Prop
     }
 
     setMistakes((value) => value + 1);
-    setProgress(0);
+    setProgress(supportLevel === "high" ? Math.max(0, progress - 1) : 0);
   };
 
   return (
     <div className="max-w-lg mx-auto text-center">
-      <p className="text-sm text-muted-foreground mb-4">
+      <p className="text-sm text-muted-foreground mb-3">
         {phase === "watch" ? "Watch the pattern" : `Repeat the pattern: ${progress}/${sequence.length}`}
       </p>
+      <p className="text-xs text-muted-foreground mb-4">Support: {supportLevel} · Stage: {readinessStage}</p>
 
       <div className="bg-muted rounded-2xl p-6 mb-4">
         <div className="flex justify-center gap-3 flex-wrap mb-6 min-h-16">
@@ -84,7 +87,7 @@ export default function SequenceEngine({ game, onInteraction, onComplete }: Prop
               animate={phase === "watch" && index === flashIndex ? { scale: 1.2, opacity: 1 } : { scale: 1, opacity: phase === "watch" && index > flashIndex ? 0.3 : 0.8 }}
               className="text-4xl"
             >
-              {phase === "watch" || index < progress ? symbol : "•"}
+              {phase === "watch" || index < progress || supportLevel === "high" ? symbol : "•"}
             </motion.div>
           ))}
         </div>

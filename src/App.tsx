@@ -5,6 +5,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider } from "@/context/AppContext";
 import BlobBackground from "@/components/BlobBackground";
+import AdminDashboard from "@/components/admin/AdminDashboard";
+import TherapistDashboard from "@/components/therapist/TherapistDashboard";
+import ParentDashboard from "@/components/parent/ParentDashboard";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -22,6 +25,9 @@ const App = () => (
             <BrowserRouter>
               <Routes>
                 <Route path="/" element={<Index />} />
+                <Route path="/therapist" element={<TherapistDashboard />} />
+                <Route path="/family" element={<ParentDashboard />} />
+                <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
