@@ -18,6 +18,14 @@ const themeTargets: Record<string, { target: string; items: string[]; correctIte
   "learn emotions": { target: "Tap the faces showing emotions", items: ["😊", "😮", "📘", "😢", "🧩", "😡"], correctItems: ["😊", "😮", "😢", "😡"] },
   "learn colors": { target: "Tap the color circles", items: ["🔴", "🔵", "🟢", "🍎", "🚗", "🌼"], correctItems: ["🔴", "🔵", "🟢"] },
   "learn shapes": { target: "Tap the shapes", items: ["🔺", "🟦", "⭐", "🍎", "🚗", "🌼"], correctItems: ["🔺", "🟦", "⭐"] },
+  "rainbow sort": { target: "Pick the rainbow colors", items: ["Red", "Orange", "Yellow", "Green", "Blue", "Book"], correctItems: ["Red", "Orange", "Yellow", "Green", "Blue"] },
+  "shape shadows": { target: "Pick the shape shadows", items: ["Triangle", "Square", "Circle", "Diamond", "Tree", "Car"], correctItems: ["Triangle", "Square", "Circle", "Diamond"] },
+  "color mixing": { target: "Pick the mixed colors", items: ["Purple", "Green", "Orange", "Red", "Blue", "Yellow"], correctItems: ["Purple", "Green", "Orange"] },
+  "pattern fill": { target: "Pick the repeating pattern pieces", items: ["AB", "BA", "AAB", "BBA", "Car", "Sun"], correctItems: ["AB", "BA", "AAB", "BBA"] },
+  "shape puzzle": { target: "Pick the puzzle shapes", items: ["Triangle", "Square", "Circle", "Diamond", "Fish", "Leaf"], correctItems: ["Triangle", "Square", "Circle", "Diamond"] },
+  "color match": { target: "Pick the color matches", items: ["Red", "Blue", "Green", "Yellow", "Dog", "Cup"], correctItems: ["Red", "Blue", "Green", "Yellow"] },
+  "triangle hunt": { target: "Find the triangles", items: ["Triangle", "Triangle", "Triangle", "Square", "Circle", "Diamond"], correctItems: ["Triangle"] },
+  "symmetry mirror": { target: "Pick the mirrored pairs", items: ["||", "<>", "()", "[]", "T", "L"], correctItems: ["||", "<>", "()", "[]"] },
   default: { target: "Pick the matching items", items: ["⭐", "⭐", "🎈", "🧩", "⭐", "🎨"], correctItems: ["⭐"] },
 };
 

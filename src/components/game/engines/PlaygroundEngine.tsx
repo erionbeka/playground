@@ -27,6 +27,24 @@ const playgroundThemes: Record<string, { emoji: string; prompt: string }[]> = {
     { emoji: "💬", prompt: "Start a short chat" },
     { emoji: "🤝", prompt: "Take turns talking" },
   ],
+  beach: [
+    { emoji: "[]", prompt: "Choose a sandy spot" },
+    { emoji: "o", prompt: "Place a round shape" },
+    { emoji: "^", prompt: "Add a triangle shape" },
+    { emoji: "*", prompt: "Finish the sandbox picture" },
+  ],
+  swings: [
+    { emoji: "S", prompt: "Sit safely on the swing" },
+    { emoji: "1", prompt: "Count a slow push" },
+    { emoji: "2", prompt: "Match the rhythm" },
+    { emoji: "T", prompt: "Ask for another turn" },
+  ],
+  seesaw: [
+    { emoji: "=", prompt: "Find the balance point" },
+    { emoji: "1", prompt: "Press down gently" },
+    { emoji: "2", prompt: "Let your friend go up" },
+    { emoji: "T", prompt: "Take turns balancing" },
+  ],
   default: [
     { emoji: "🌳", prompt: "Explore the playground" },
     { emoji: "🎈", prompt: "Try the next activity" },
@@ -36,7 +54,8 @@ const playgroundThemes: Record<string, { emoji: string; prompt: string }[]> = {
 };
 
 export default function PlaygroundEngine({ game, onInteraction, onComplete }: Props) {
-  const steps = useMemo(() => playgroundThemes[game.engine] || playgroundThemes.default, [game.engine]);
+  const theme = String(game.config.theme || game.engine);
+  const steps = useMemo(() => playgroundThemes[theme] || playgroundThemes[game.engine] || playgroundThemes.default, [game.engine, theme]);
   const [current, setCurrent] = useState(0);
 
   const handleNext = () => {

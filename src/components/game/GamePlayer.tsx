@@ -81,7 +81,7 @@ export default function GamePlayer({ gameId, assignment, onComplete }: Props) {
   );
 
   const runtimeGame = useMemo(
-    () => ({
+    () => game ? ({
       ...game,
       config: {
         ...game.config,
@@ -89,7 +89,7 @@ export default function GamePlayer({ gameId, assignment, onComplete }: Props) {
         supportLevel: assignment.supportLevel || game.config.supportLevel || "moderate",
         readinessStage: readiness?.stage || "build",
       },
-    }),
+    }) : null,
     [assignment.difficulty, assignment.supportLevel, game, readiness?.stage]
   );
 
@@ -146,6 +146,33 @@ export default function GamePlayer({ gameId, assignment, onComplete }: Props) {
           <div className="text-7xl mb-4 animate-bounce-gentle">{game.emoji}</div>
           <h1 className="font-display text-3xl font-extrabold text-foreground mb-2">{game.name}</h1>
           <p className="text-muted-foreground mb-6">{game.description}</p>
+          <div className="mb-5 rounded-2xl border border-border bg-card p-4 text-left">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              {game.ageRange ? (
+                <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-foreground">
+                  Ages {game.ageRange.min}-{game.ageRange.max}
+                </span>
+              ) : null}
+              <span className="rounded-full bg-secondary/20 px-3 py-1 text-xs font-semibold text-foreground capitalize">
+                {game.difficulty}
+              </span>
+            </div>
+            {game.learningGoal ? (
+              <p className="text-sm font-semibold text-foreground">{game.learningGoal}</p>
+            ) : null}
+            {game.adultPrompt ? (
+              <p className="mt-2 text-xs text-muted-foreground">Adult prompt: {game.adultPrompt}</p>
+            ) : null}
+            {game.autismSupports && game.autismSupports.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {game.autismSupports.slice(0, 4).map((support) => (
+                  <span key={support} className="rounded-full bg-muted px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                    {support}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <div className="flex gap-3 justify-center mb-6">
             {game.skills.map((s) => (
               <span key={s} className="text-xs bg-primary/10 text-foreground px-3 py-1 rounded-full capitalize">{s}</span>
@@ -171,6 +198,14 @@ export default function GamePlayer({ gameId, assignment, onComplete }: Props) {
     );
   }
 
+  if (!runtimeGame) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-foreground">Game not found</p>
+      </div>
+    );
+  }
+
   const engineProps = { game: runtimeGame, onInteraction: handleInteraction, onComplete: handleGameComplete };
 
   return (
@@ -178,7 +213,12 @@ export default function GamePlayer({ gameId, assignment, onComplete }: Props) {
       <div className="bg-card/85 backdrop-blur-md border-b border-border px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xl">{game.emoji}</span>
-          <span className="font-display font-bold text-foreground text-sm">{game.name}</span>
+          <div>
+            <span className="font-display font-bold text-foreground text-sm">{game.name}</span>
+            {runtimeGame.learningGoal ? (
+              <p className="hidden text-[10px] text-muted-foreground sm:block">{runtimeGame.learningGoal}</p>
+            ) : null}
+          </div>
         </div>
         <button onClick={onComplete} className="text-xs text-muted-foreground hover:text-foreground touch-target px-3">
           Exit

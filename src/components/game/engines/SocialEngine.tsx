@@ -29,10 +29,47 @@ const scenarioBank: Record<string, Scenario[]> = {
   ],
 };
 
+function sentenceCase(value: string) {
+  return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function buildThemeScenarios(theme: string): Scenario[] {
+  const label = sentenceCase(theme.replace(/-/g, " "));
+  return [
+    {
+      situation: `You are practicing ${label}. What is a helpful first step?`,
+      options: [
+        { text: `Try ${label} with kind words`, emoji: "1", points: 25, social: 3 },
+        { text: "Ask an adult or friend for support", emoji: "?", points: 22, social: 3 },
+        { text: "Take a calm breath first", emoji: "B", points: 18, social: 2 },
+        { text: "Ignore the activity", emoji: "-", points: 5, social: 0 },
+      ],
+    },
+    {
+      situation: `Someone else wants to join while you practice ${label}. What do you do?`,
+      options: [
+        { text: "Invite them to take a turn", emoji: "T", points: 25, social: 3 },
+        { text: "Show them what you are doing", emoji: "S", points: 22, social: 3 },
+        { text: "Use a short sentence to explain", emoji: "W", points: 20, social: 2 },
+        { text: "Push their idea away", emoji: "X", points: 5, social: 0 },
+      ],
+    },
+    {
+      situation: `${label} feels hard today. What helps you keep going?`,
+      options: [
+        { text: "Ask for a smaller step", emoji: "s", points: 25, social: 3 },
+        { text: "Use a visual or gesture", emoji: "V", points: 22, social: 2 },
+        { text: "Take a short break and return", emoji: "P", points: 20, social: 2 },
+        { text: "Quit without telling anyone", emoji: "Q", points: 5, social: 0 },
+      ],
+    },
+  ];
+}
+
 export default function SocialEngine({ game, onInteraction, onComplete }: Props) {
   const { difficulty, supportLevel, readinessStage } = getAdaptiveGameConfig(game);
   const theme = String(game.config.theme || "default");
-  const allScenarios = scenarioBank[theme] || scenarioBank.default;
+  const allScenarios = scenarioBank[theme] || buildThemeScenarios(theme);
   const scenarioCount = difficulty === "easy" || supportLevel === "high" ? 2 : Math.min(3, allScenarios.length);
   const scenarios = useMemo(() => allScenarios.slice(0, scenarioCount), [allScenarios, scenarioCount]);
   const [current, setCurrent] = useState(0);

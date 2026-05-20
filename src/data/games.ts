@@ -42,6 +42,11 @@ export interface GameConfig {
   estimatedMinutes: number;
   supportsShared: boolean;
   supportsMultiplayer: boolean;
+  ageRange?: { min: number; max: number };
+  learningGoal?: string;
+  adultPrompt?: string;
+  autismSupports?: string[];
+  successCriteria?: string[];
   config: Record<string, unknown>;
 }
 
@@ -63,6 +68,123 @@ const categoryMeta: Record<GameCategory, { label: string; emoji: string; color: 
 };
 
 export { categoryMeta };
+
+function ageRangeFor(game: GameConfig) {
+  if (game.difficulty === "easy") return { min: 0, max: 4 };
+  if (game.difficulty === "medium") return { min: 3, max: 6 };
+  return { min: 5, max: 8 };
+}
+
+const categoryLearningTargets: Record<GameCategory, { goal: string; prompt: string; supports: string[]; success: string[] }> = {
+  playground: {
+    goal: "Practice shared play, imitation, turn-taking, and safe body movement through predictable play routines.",
+    prompt: "Model the action first, use a short phrase, then wait quietly for the child to copy or choose.",
+    supports: ["first-then routine", "co-regulation pause", "turn-taking language", "movement break"],
+    success: ["Completes the play routine", "Accepts a turn or transition", "Uses a gesture, word, or action to participate"],
+  },
+  matching: {
+    goal: "Build visual discrimination, object recognition, joint attention, and working memory.",
+    prompt: "Name one card, point to its match, and give the child time to scan before helping.",
+    supports: ["reduced visual field", "matching by sameness", "errorless prompting option", "clear finish point"],
+    success: ["Finds matching pairs", "Scans choices before tapping", "Completes the board with decreasing prompts"],
+  },
+  sequences: {
+    goal: "Learn order, imitation, daily routines, and early executive-function skills.",
+    prompt: "Say 'watch first, then your turn' and tap each step slowly while the child watches.",
+    supports: ["watch-then-repeat structure", "predictable sequence", "visual step cues", "restart after mistakes"],
+    success: ["Repeats the sequence", "Follows a first-next-last pattern", "Recovers from mistakes with support"],
+  },
+  sorting: {
+    goal: "Develop category learning, receptive language, flexible thinking, and comparison skills.",
+    prompt: "Say the category names out loud and gesture to each side before the child chooses.",
+    supports: ["two-choice sorting", "category labels", "consistent button positions", "low-language response"],
+    success: ["Sorts items into categories", "Responds to category labels", "Maintains attention across multiple items"],
+  },
+  tapping: {
+    goal: "Practice visual tracking, fine-motor control, response inhibition, and sustained attention.",
+    prompt: "Encourage slow looking first, then tapping only the target.",
+    supports: ["large targets", "short timed round", "calm visual background", "distractor reduction by support level"],
+    success: ["Taps visible targets", "Ignores decoys when present", "Completes the round without overload"],
+  },
+  social: {
+    goal: "Practice social understanding, turn-taking, help-seeking, flexible choices, and kind communication.",
+    prompt: "Read the situation slowly, act out the choices, and accept pointing or gestures as answers.",
+    supports: ["social story format", "safe choice practice", "emotion-neutral feedback", "adult co-play"],
+    success: ["Chooses a prosocial response", "Practices a communication action", "Stays engaged through multiple scenarios"],
+  },
+  building: {
+    goal: "Strengthen planning, imitation from model, spatial reasoning, and visual-motor coordination.",
+    prompt: "Show the model, name the next piece, and let the child place one piece at a time.",
+    supports: ["build-from-model", "one-step-at-a-time", "visible template", "concrete shape pieces"],
+    success: ["Places pieces in order", "Uses the model to guide action", "Completes the structure"],
+  },
+  "colors-shapes": {
+    goal: "Learn early concepts including colors, shapes, visual attention, and receptive vocabulary.",
+    prompt: "Name the target, point once, then wait for the child to select.",
+    supports: ["clear visual targets", "small choice set", "label repetition", "gesture-friendly response"],
+    success: ["Identifies target items", "Responds to color/shape labels", "Completes the visual search"],
+  },
+  counting: {
+    goal: "Build early numeracy, one-to-one correspondence, attention, and quantity recognition.",
+    prompt: "Point and count together slowly, then ask the child to choose the number.",
+    supports: ["visible count set", "small number range", "answer choices", "shared counting"],
+    success: ["Counts items with support", "Chooses the matching number", "Completes a counting trial"],
+  },
+  memory: {
+    goal: "Practice recall, visual attention, sequencing memory, and listening/looking skills.",
+    prompt: "Preview the items, use a calm countdown, then ask which item appeared in the named position.",
+    supports: ["brief memory set", "predictable delay", "small answer set", "support-level timing"],
+    success: ["Watches the memory set", "Chooses a recalled item", "Maintains focus through the delay"],
+  },
+  emotions: {
+    goal: "Develop emotion recognition, self-regulation language, and body-state awareness.",
+    prompt: "Label the feeling gently and connect it to a simple regulation choice.",
+    supports: ["emotion labeling", "calm feedback", "safe pretend scenarios", "co-regulation option"],
+    success: ["Identifies or practices a feeling", "Chooses a regulation-friendly response", "Uses gesture, word, or selection"],
+  },
+  language: {
+    goal: "Support receptive and expressive communication, vocabulary, sentence starts, and conversation practice.",
+    prompt: "Offer a model phrase and accept pointing, single words, AAC, or short phrases.",
+    supports: ["short language models", "choice-based response", "AAC-friendly prompts", "wait time"],
+    success: ["Responds to a language prompt", "Practices a word, gesture, or sentence", "Completes multiple communication turns"],
+  },
+  motor: {
+    goal: "Practice fine-motor precision, hand-eye coordination, motor planning, and controlled movement.",
+    prompt: "Demonstrate the motion slowly and let the child try without rushing.",
+    supports: ["large tap targets", "short rounds", "calm pacing", "movement imitation"],
+    success: ["Completes the motor action", "Improves control across the round", "Stays regulated while moving"],
+  },
+  "daily-living": {
+    goal: "Practice independence routines, transition readiness, self-care sequencing, and functional communication.",
+    prompt: "Use the same words as the real routine and connect the game steps to daily life.",
+    supports: ["routine sequence", "first-next-last cues", "functional vocabulary", "caregiver co-practice"],
+    success: ["Orders routine steps", "Recognizes daily-living vocabulary", "Practices a real-life transition"],
+  },
+};
+
+function enhanceGameForAutisticLearners(game: GameConfig): GameConfig {
+  const target = categoryLearningTargets[game.category];
+  const ageRange = ageRangeFor(game);
+  return {
+    ...game,
+    ageRange,
+    learningGoal: target.goal,
+    adultPrompt: target.prompt,
+    autismSupports: target.supports,
+    successCriteria: target.success,
+    estimatedMinutes: Math.min(game.estimatedMinutes, game.difficulty === "easy" ? 4 : game.difficulty === "medium" ? 5 : 6),
+    config: {
+      ...game.config,
+      ageRange,
+      learningGoal: target.goal,
+      adultPrompt: target.prompt,
+      autismSupports: target.supports,
+      successCriteria: target.success,
+      developmentalStage: game.difficulty === "easy" ? "early learner" : game.difficulty === "medium" ? "developing learner" : "school readiness",
+      responseModes: ["tap", "point", "gesture", "spoken word", "AAC"],
+    },
+  };
+}
 
 function makeGames(): GameConfig[] {
   const games: GameConfig[] = [];
@@ -490,7 +612,7 @@ function makeGames(): GameConfig[] {
   return games;
 }
 
-export const allGames = makeGames();
+export const allGames = makeGames().map(enhanceGameForAutisticLearners);
 
 export function getGamesByCategory(category: GameCategory): GameConfig[] {
   return allGames.filter((game) => game.category === category);
