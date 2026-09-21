@@ -1,4 +1,4 @@
-﻿# Playground Life
+# Playground Life
 
 Playground Life is a clinic-ready application for assigning, playing, and reviewing structured learning activities for autistic children. It supports separate admin, therapist, and family workflows and includes a self-hosted Postgres production backend foundation.
 
@@ -31,6 +31,7 @@ Key scripts:
 - `npm run typecheck:server`: type-check backend code.
 - `npm test`: run frontend and backend tests.
 - `npm audit --omit=dev`: check production dependency vulnerabilities.
+- `VITE_DATA_MODE=api`: run the React app against the Postgres API provider.
 
 ## Data Stored
 
@@ -43,7 +44,7 @@ The browser `localStorage` demo state remains available for local UI demonstrati
 Validation to date is technical and workflow-focused:
 
 - Unit and component tests cover personalization helpers, monthly-plan logic, therapist workflows, family sign-in, admin credential controls, reporting defaults, and all game engine smoke paths.
-- Backend API tests cover login, invalid credentials, role restrictions, child creation, result recording, and audit event creation.
+- Backend API tests cover login, invalid credentials, role restrictions, child creation, caregiver creation, caregiver reset restrictions, therapy goals, result recording, and audit event creation.
 - Backend type-checking covers the Postgres API foundation.
 - Build verification is run with `npm run build` using Vite.
 - Production dependency audit currently reports zero vulnerabilities with `npm audit --omit=dev`.

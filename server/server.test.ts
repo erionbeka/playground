@@ -115,6 +115,140 @@ describe("production API", () => {
       .expect(201);
 
     expect(response.body.gameId).toBe("game-001");
+    expect(queryMock).toHaveBeenCalledWith(expect.stringContaining("completedSuccessfully"), ["00000000-0000-0000-0000-000000000002"]);
     expect(writeAuditMock).toHaveBeenCalledWith(expect.anything(), "game_result_recorded", "result", "00000000-0000-0000-0000-000000000002", { gameId: "game-001", score: 88 });
+  });
+
+  it("stores failed game attempts without counting them toward assignment completion", async () => {
+    queryMock
+      .mockResolvedValueOnce({ rows: [{ id: "assignment-1", child_id: "child-1", game_ids: ["game-001"] }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const app = await loadApp();
+    await request(app)
+      .post("/api/assignments/00000000-0000-0000-0000-000000000002/results")
+      .set("Authorization", "Bearer parent-token")
+      .send({
+        gameId: "game-001",
+        durationSeconds: 120,
+        score: 45,
+        interactions: 12,
+        metrics: { completedSuccessfully: false, accuracy: 45, trials: 10, correctTrials: 4, errors: 6 },
+      })
+      .expect(201);
+
+    expect(queryMock).toHaveBeenCalledWith(expect.stringContaining("completedSuccessfully"), ["00000000-0000-0000-0000-000000000002"]);
+    expect(queryMock).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO game_results"), expect.arrayContaining([
+      "00000000-0000-0000-0000-000000000002",
+      "child-1",
+      "game-001",
+      120,
+      45,
+      12,
+      JSON.stringify({ completedSuccessfully: false, accuracy: 45, trials: 10, correctTrials: 4, errors: 6 }),
+    ]));
+  });
+
+  it("scopes parent assignment lists to linked children", async () => {
+    queryMock.mockResolvedValueOnce({ rows: [{ id: "assignment-linked" }] });
+
+    const app = await loadApp();
+    const response = await request(app)
+      .get("/api/assignments")
+      .set("Authorization", "Bearer parent-token")
+      .expect(200);
+
+    expect(response.body.assignments).toEqual([{ id: "assignment-linked" }]);
+    expect(queryMock).toHaveBeenCalledWith(expect.stringContaining("JOIN family_child_links"), ["clinic-1", "user-parent"]);
+  });
+
+  it("returns only the signed-in caregiver family session", async () => {
+    queryMock
+      .mockResolvedValueOnce({ rows: [{ id: "child-linked" }] })
+      .mockResolvedValueOnce({ rows: [{ id: "assignment-linked" }] });
+
+    const app = await loadApp();
+    const response = await request(app)
+      .get("/api/family/session")
+      .set("Authorization", "Bearer parent-token")
+      .expect(200);
+
+    expect(response.body).toEqual({
+      children: [{ id: "child-linked" }],
+      assignments: [{ id: "assignment-linked" }],
+    });
+  });
+
+  it("does not let parents record results for unlinked assignments", async () => {
+    queryMock.mockResolvedValueOnce({ rows: [] });
+
+    const app = await loadApp();
+    await request(app)
+      .post("/api/assignments/00000000-0000-0000-0000-000000000099/results")
+      .set("Authorization", "Bearer parent-token")
+      .send({ gameId: "game-001", durationSeconds: 120, score: 88, interactions: 12 })
+      .expect(404);
+  });
+
+  it("lets therapists create caregiver links for a child", async () => {
+    queryMock
+      .mockResolvedValueOnce({ rows: [{ id: "caregiver-user-1" }] })
+      .mockResolvedValueOnce({ rows: [{ id: "family-link-1" }] });
+
+    const app = await loadApp();
+    const response = await request(app)
+      .post("/api/families")
+      .set("Authorization", "Bearer therapist-token")
+      .send({
+        childId: "00000000-0000-0000-0000-000000000010",
+        name: "Caregiver One",
+        relationship: "parent",
+        phoneNumber: "555-0101",
+        temporaryPassword: "CorrectHorseBatteryStaple1",
+      })
+      .expect(201);
+
+    expect(response.body).toEqual({ id: "family-link-1", userId: "caregiver-user-1" });
+    expect(writeAuditMock).toHaveBeenCalledWith(expect.anything(), "caregiver_created", "credential", "family-link-1", {
+      childId: "00000000-0000-0000-0000-000000000010",
+      relationship: "parent",
+    });
+  });
+
+  it("restricts caregiver password resets to admins", async () => {
+    const app = await loadApp();
+    await request(app)
+      .post("/api/families/caregiver-user-1/reset-password")
+      .set("Authorization", "Bearer therapist-token")
+      .send({ temporaryPassword: "CorrectHorseBatteryStaple1" })
+      .expect(403);
+  });
+
+  it("lets therapists create and update therapy goals", async () => {
+    queryMock
+      .mockResolvedValueOnce({ rows: [{ id: "goal-1" }] })
+      .mockResolvedValueOnce({ rows: [{ id: "goal-1" }] });
+
+    const app = await loadApp();
+    await request(app)
+      .post("/api/goals")
+      .set("Authorization", "Bearer therapist-token")
+      .send({
+        childId: "00000000-0000-0000-0000-000000000010",
+        domain: "social",
+        title: "Increase turn-taking",
+        targetLevel: 80,
+      })
+      .expect(201);
+
+    const response = await request(app)
+      .patch("/api/goals/goal-1/status")
+      .set("Authorization", "Bearer therapist-token")
+      .send({ status: "achieved" })
+      .expect(200);
+
+    expect(response.body).toEqual({ id: "goal-1", status: "achieved" });
+    expect(writeAuditMock).toHaveBeenCalledWith(expect.anything(), "goal_status_updated", "goal", "goal-1", { status: "achieved" });
   });
 });

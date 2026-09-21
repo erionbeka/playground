@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -44,6 +44,52 @@ function RemoveAndCompleteProbe() {
   }, [completeGame, removeChild]);
 
   return <pre data-testid="assignments">{JSON.stringify(assignments)}</pre>;
+}
+
+function FailedAttemptProbe() {
+  const { completeGame, assignments } = useApp();
+
+  useEffect(() => {
+    completeGame("cw-1", {
+      gameId: "game-052",
+      completedAt: "2026-04-06",
+      durationSeconds: 88,
+      score: 45,
+      interactions: 9,
+      completedSuccessfully: false,
+      trials: 10,
+      correctTrials: 4,
+      errors: 6,
+      accuracy: 40,
+      masteryThreshold: 70,
+    });
+  }, [completeGame]);
+
+  return <pre data-testid="failed-attempt-assignments">{JSON.stringify(assignments)}</pre>;
+}
+
+function FailedAttemptReviewProbe() {
+  const { completeGame } = useApp();
+
+  useEffect(() => {
+    completeGame("cw-1", {
+      gameId: "game-052",
+      completedAt: "2026-04-06",
+      durationSeconds: 88,
+      score: 45,
+      interactions: 9,
+      completedSuccessfully: false,
+      trials: 10,
+      correctTrials: 4,
+      errors: 6,
+      accuracy: 40,
+      masteryThreshold: 70,
+      attemptsBySkill: { "visual-recognition": 10 },
+      observations: ["Needed support identifying matching facial cues"],
+    });
+  }, [completeGame]);
+
+  return <HomeworkReview />;
 }
 
 beforeEach(() => {
@@ -359,6 +405,26 @@ describe("app workflows", () => {
     expect(assignments.some((assignment: HomeworkAssignment) => assignment.childId === "child-2")).toBe(false);
   });
 
+  it("records failed game attempts without marking the game complete", () => {
+    render(
+      <AppProvider>
+        <FailedAttemptProbe />
+      </AppProvider>
+    );
+
+    const assignments = JSON.parse(screen.getByTestId("failed-attempt-assignments").textContent || "[]");
+    const assignment = assignments.find((entry: HomeworkAssignment) => entry.id === "cw-1");
+
+    expect(assignment.completedGames).not.toContain("game-052");
+    expect(assignment.status).toBe("pending");
+    expect(assignment.results[0]).toEqual(expect.objectContaining({
+      gameId: "game-052",
+      completedSuccessfully: false,
+      accuracy: 40,
+      errors: 6,
+    }));
+  });
+
   it("lets therapists create secure family sign-in credentials", () => {
     render(
       <MemoryRouter>
@@ -376,6 +442,21 @@ describe("app workflows", () => {
 
     expect(screen.getByText(/555-0401/i).textContent).toMatch(/credentials active/i);
     expect(screen.queryByText(/nina-pass/i)).not.toBeInTheDocument();
+  });
+
+  it("shows one child profile at a time from the children selector", () => {
+    render(
+      <MemoryRouter>
+        <AppProvider>
+          <ChildList />
+        </AppProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/select child/i), { target: { value: "child-2" } });
+
+    expect(screen.getByRole("heading", { name: /^Liam$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^Emma$/i })).not.toBeInTheDocument();
   });
 
   it("lets therapists apply a reusable goal template to a child", () => {
@@ -529,7 +610,8 @@ describe("app workflows", () => {
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "emma123" } });
     fireEvent.click(screen.getByText("Sign In"));
 
-    expect(screen.getByText(/^classwork$/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^classwork$/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Classwork access/i)).toBeInTheDocument();
     expect(screen.getByText(/Group session - practice social interactions with peers\./i)).toBeInTheDocument();
   });
 
@@ -554,12 +636,15 @@ describe("app workflows", () => {
   it("lets admins issue invites and reset family credentials", () => {
     function AdminProbe() {
       const { signInAdmin, issueFamilyInvite, resetFamilyCredentials, children, session } = useApp();
+      const initialized = useRef(false);
 
       useEffect(() => {
+        if (initialized.current) return;
+        initialized.current = true;
         signInAdmin("admin@playgroundlife.app", "admin123");
         issueFamilyInvite("child-1", "fm-1");
         resetFamilyCredentials("child-1", "fm-1", "Reset123", true);
-      }, []);
+      }, [issueFamilyInvite, resetFamilyCredentials, signInAdmin]);
 
       return <pre data-testid="admin-probe">{JSON.stringify({ session, children })}</pre>;
     }
@@ -615,5 +700,24 @@ describe("app workflows", () => {
     expect(screen.getByText(/Quick Review/i)).toBeInTheDocument();
     expect(screen.getByText(/Quick Assignment Review/i)).toBeInTheDocument();
     expect(screen.queryByText(/Clinical Domain Profile/i)).not.toBeInTheDocument();
+  });
+
+  it("lets therapists open needs-review attempts and see what the child did", async () => {
+    render(
+      <MemoryRouter>
+        <AppProvider>
+          <FailedAttemptReviewProbe />
+        </AppProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /open review/i }));
+
+    expect(screen.getByText("Retry")).toBeInTheDocument();
+    expect(screen.getAllByText("40%").length).toBeGreaterThan(0);
+    expect(screen.getByText("6")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Skill notes"));
+    expect(screen.getByText(/visual recognition: 10/i)).toBeInTheDocument();
+    expect(screen.getByText(/Needed support identifying matching facial cues/i)).toBeInTheDocument();
   });
 });

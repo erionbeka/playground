@@ -10,10 +10,13 @@
     "build:dev": "vite build --mode development",
     "db:migrate": "tsx server/migrate.ts",
     "db:seed": "tsx server/seed.ts",
+    "docker:dev": "docker compose up -d postgres",
+    "docker:prod": "docker compose -f docker-compose.prod.yml up --build",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck:server": "tsc -p tsconfig.server.json",
-    "test": "vitest run",
+    "visual:smoke": "node scripts/visual-smoke.cjs",
+    "test": "vitest run --no-file-parallelism --maxWorkers=1",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -94,7 +97,7 @@
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@types/supertest": "^7.2.0",
-    "@vitejs/plugin-react-swc": "^3.11.0",
+    "@vitejs/plugin-react-swc": "^4.3.1",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
@@ -108,7 +111,7 @@
     "tsx": "^4.21.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
-    "vite": "^5.4.19",
+    "vite": "^7.3.3",
     "vitest": "^3.2.4"
   }
 }

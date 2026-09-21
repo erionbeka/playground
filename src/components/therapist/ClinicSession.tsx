@@ -3,6 +3,7 @@ import { useApp } from "@/context/AppContext";
 import { allGames, categoryMeta, GameCategory, Difficulty } from "@/data/games";
 import { motion, AnimatePresence } from "framer-motion";
 import { getGameSkillDomains } from "@/lib/skills";
+import { CategoryIcon, GameIcon, PersonIcon } from "@/components/icons/AppIcon";
 
 const categories = Object.entries(categoryMeta) as [GameCategory, typeof categoryMeta[GameCategory]][];
 
@@ -58,6 +59,12 @@ export default function ClinicSession() {
     <div>
       <h2 className="font-display text-lg font-bold text-foreground mb-2">Clinic Classwork</h2>
       <p className="text-sm text-muted-foreground mb-6">Assign solo or multiplayer activities for in-clinic sessions</p>
+      <div className="mb-6 rounded-2xl border border-primary/15 bg-primary/5 p-4">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">How kids access classwork</p>
+        <p className="mt-2 text-sm text-foreground">
+          Create classwork here, then the child/caregiver signs into the Family portal. The assignment appears under the Classwork tab and can be opened on the clinic tablet, therapy-room computer, or a home device.
+        </p>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
@@ -74,12 +81,12 @@ export default function ClinicSession() {
                       : "border-border bg-card hover:border-primary/30"
                   }`}
                 >
-                  <span className="text-2xl">{c.avatar}</span>
+                  <PersonIcon label={c.name} avatar={c.avatar} size="md" />
                   <div className="text-left">
                     <p className="font-bold text-sm text-foreground">{c.name}</p>
                     <p className="text-xs text-muted-foreground">Age {c.age}</p>
                   </div>
-                  {selectedChildren.includes(c.id) && <span className="ml-auto text-primary">Done</span>}
+                  {selectedChildren.includes(c.id) && <span className="ml-auto rounded-full bg-primary/10 px-2 py-1 text-xs font-bold text-primary">Selected</span>}
                 </button>
               ))}
             </div>
@@ -122,7 +129,10 @@ export default function ClinicSession() {
                 const g = availableGames.find((game) => game.id === id) || allGames.find((game) => game.id === id);
                 return g ? (
                   <span key={id} className="text-xs bg-primary/10 text-foreground px-2 py-1 rounded-full">
-                    {g.emoji} {g.name}
+                    <span className="inline-flex items-center gap-2">
+                      <GameIcon game={g} size="sm" />
+                      {g.name}
+                    </span>
                   </span>
                 ) : null;
               })}
@@ -155,8 +165,9 @@ export default function ClinicSession() {
               const count = availableGames.filter((g) => g.category === key).length;
               if (count === 0) return null;
               return (
-                <button key={key} onClick={() => setFilterCategory(key)} className={`px-3 py-1.5 rounded-full text-xs font-semibold touch-target transition-colors ${filterCategory === key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                  {meta.emoji} {meta.label} ({count})
+                <button key={key} onClick={() => setFilterCategory(key)} className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold touch-target transition-colors ${filterCategory === key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                  <CategoryIcon category={key} size="sm" />
+                  <span>{meta.label} ({count})</span>
                 </button>
               );
             })}
@@ -173,7 +184,7 @@ export default function ClinicSession() {
                     : "border-border bg-card hover:border-primary/30"
                 }`}
               >
-                <div className="text-2xl mb-1">{g.emoji}</div>
+                <div className="mb-2"><GameIcon game={g} size="md" /></div>
                 <p className="text-xs font-bold text-foreground leading-tight">{g.name}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">{g.estimatedMinutes}min - {g.difficulty}</p>
                 {mode === "multiplayer" && (

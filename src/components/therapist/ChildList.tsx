@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Child, ClinicalRatings, FamilyMember, useApp } from "@/context/AppContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { getPersonalizationSummary } from "@/lib/personalization";
 import { hashSecret } from "@/lib/auth";
 import { emptySkillProfile } from "@/lib/skills";
 import { buildGoalFromTemplate, goalTemplates } from "@/lib/goalTemplates";
+import { BookOpen, PersonIcon, School } from "@/components/icons/AppIcon";
 
 function splitTags(value: string) {
   return value
@@ -58,6 +59,13 @@ export default function ChildList() {
   const [fmPhoneNumber, setFmPhoneNumber] = useState("");
   const [fmPassword, setFmPassword] = useState("");
   const [goalTemplateByChild, setGoalTemplateByChild] = useState<Record<string, string>>({});
+  const [selectedChildId, setSelectedChildId] = useState(children[0]?.id || "");
+
+  const selectedChild = useMemo(
+    () => children.find((child) => child.id === selectedChildId) || children[0],
+    [children, selectedChildId]
+  );
+  const visibleChildren = useMemo(() => (selectedChild ? [selectedChild] : []), [selectedChild]);
 
   const avatars = ["👧", "👦", "👶", "🧒"];
   const fmAvatars = ["👩", "👨", "👧", "👦", "👵", "👴"];
@@ -263,11 +271,19 @@ export default function ChildList() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h2 className="font-display text-lg font-bold text-foreground">My Children ({children.length})</h2>
-        <button onClick={() => (showForm ? resetChildForm() : setShowForm(true))} className="touch-target rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
-          {showForm ? "Cancel" : "+ Add Child"}
-        </button>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-lg font-bold text-foreground">Children</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Select one child to view the full profile, goals, family access, and clinical details.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={selectedChild?.id || ""} onChange={(event) => setSelectedChildId(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground" aria-label="Select child">
+            {children.map((child) => <option key={child.id} value={child.id}>{child.avatar} {child.name}</option>)}
+          </select>
+          <button onClick={() => (showForm ? resetChildForm() : setShowForm(true))} className="touch-target rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+            {showForm ? "Cancel" : "+ Add Child"}
+          </button>
+        </div>
       </div>
 
       <AnimatePresence>
@@ -388,8 +404,8 @@ export default function ChildList() {
         ) : null}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {children.map((child) => {
+      <div className="grid grid-cols-1 gap-4">
+        {visibleChildren.map((child) => {
           const childAssignments = assignments.filter((assignment) => assignment.childId === child.id);
           const pending = childAssignments.filter((assignment) => assignment.status === "pending").length;
           const completed = childAssignments.filter((assignment) => assignment.status === "completed").length;
@@ -401,7 +417,7 @@ export default function ChildList() {
             <motion.div key={child.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="rounded-xl border border-border bg-card p-5 shadow-sm">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <span className="text-4xl">{child.avatar}</span>
+                  <PersonIcon label={child.name} avatar={child.avatar} size="lg" />
                   <div>
                     <h3 className="font-display font-bold text-foreground">{child.name}</h3>
                     <p className="text-sm text-muted-foreground">Age {child.age}</p>
@@ -416,8 +432,12 @@ export default function ChildList() {
               <div className="mb-3 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-accent/20 px-2 py-1 text-accent-foreground">{pending} pending</span>
                 <span className="rounded-full bg-secondary/20 px-2 py-1 text-foreground">{completed} completed</span>
-                <span className="rounded-full bg-primary/10 px-2 py-1 text-foreground">📝 {homeworkCount}</span>
-                <span className="rounded-full bg-primary/10 px-2 py-1 text-foreground">🏥 {classworkCount}</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-foreground">
+                  <BookOpen className="h-3 w-3" aria-hidden="true" /> {homeworkCount} homework
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-foreground">
+                  <School className="h-3 w-3" aria-hidden="true" /> {classworkCount} classwork
+                </span>
               </div>
 
               <div className="mb-3 rounded-xl bg-muted p-3">
@@ -498,7 +518,7 @@ export default function ChildList() {
                     <div key={familyMember.id} className="rounded-lg bg-muted px-2 py-1 text-xs">
                       <div className="flex items-center justify-between gap-2">
                         <span>
-                          {familyMember.avatar} {familyMember.name} <span className="text-muted-foreground">({relationshipLabels[familyMember.relationship]})</span>
+                          {familyMember.name} <span className="text-muted-foreground">({relationshipLabels[familyMember.relationship]})</span>
                         </span>
                         <button onClick={() => removeFamilyMember(child.id, familyMember.id)} className="text-[10px] text-destructive hover:underline">
                           Remove

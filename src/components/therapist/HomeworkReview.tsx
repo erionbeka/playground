@@ -1,8 +1,17 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ClinicalRatings, SkillDomain, useApp } from "@/context/AppContext";
 import { getGameById } from "@/data/games";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, LineChart, Line, Legend } from "recharts";
 import { analyzeMonthlyPlanWeekOutcome } from "@/lib/personalization";
+import { masteryStatus } from "@/lib/science";
+import TraceInspector from "./TraceInspector";
+import InsightDashboard from "./InsightDashboard";
+
+interface ResultWithInsights {
+  independenceRate?: number;
+  trace?: import("@/lib/gameAnalytics").SessionTrace;
+}
+import { GameIcon, PersonIcon } from "@/components/icons/AppIcon";
 
 const domainLabels: Record<SkillDomain, string> = {
   social: "Social",
@@ -29,24 +38,39 @@ export default function HomeworkReview() {
   const [filterType, setFilterType] = useState<"all" | "homework" | "classwork">("all");
   const [reviewMode, setReviewMode] = useState<"quick" | "detailed">("quick");
   const [generating, setGenerating] = useState(false);
+  const [openReviewKey, setOpenReviewKey] = useState<string | null>(null);
 
-  const getChild = (id: string) => children.find((entry) => entry.id === id);
+  const getChild = useCallback((id: string) => children.find((entry) => entry.id === id), [children]);
   const selectedChildren = useMemo(
     () => selectedChildId === "all" ? children : children.filter((child) => child.id === selectedChildId),
     [children, selectedChildId]
   );
+
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const filteredAssignments = useMemo(
     () =>
       assignments.filter((assignment) => {
         if (selectedChildId !== "all" && assignment.childId !== selectedChildId) return false;
         if (filterType !== "all" && assignment.type !== filterType) return false;
+        const latest = assignment.results.map((r) => r.completedAt).sort().pop() || assignment.dueDate;
+        if (dateFrom && latest < dateFrom) return false;
+        if (dateTo && latest > dateTo) return false;
         return true;
       }),
-    [assignments, filterType, selectedChildId]
+    [assignments, dateFrom, dateTo, filterType, selectedChildId]
   );
 
   const allResults = useMemo(() => filteredAssignments.flatMap((assignment) => assignment.results), [filteredAssignments]);
+  const needsReviewAssignments = useMemo(
+    () =>
+      filteredAssignments.filter((assignment) =>
+        assignment.therapistApproval === "pending" ||
+        assignment.results.some((result) => result.completedSuccessfully === false || (result.accuracy ?? result.score) < (result.masteryThreshold ?? 70))
+      ),
+    [filteredAssignments]
+  );
   const avgScore = allResults.length > 0 ? Math.round(allResults.reduce((sum, result) => sum + result.score, 0) / allResults.length) : 0;
   const avgAttention = allResults.filter((result) => result.attentionSpan != null).length > 0
     ? Math.round(allResults.filter((result) => result.attentionSpan != null).reduce((sum, result) => sum + (result.attentionSpan || 0), 0) / allResults.filter((result) => result.attentionSpan != null).length)
@@ -165,7 +189,7 @@ export default function HomeworkReview() {
           child: getChild(assignment.childId),
           review: analyzeMonthlyPlanWeekOutcome(assignment),
         })),
-    [filteredAssignments]
+    [filteredAssignments, getChild]
   );
 
   const handleGeneratePDF = async () => {
@@ -209,6 +233,8 @@ export default function HomeworkReview() {
             <option value="homework">Homework</option>
             <option value="classwork">Classwork</option>
           </select>
+          <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} aria-label="From date" className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground" />
+          <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} aria-label="To date" className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground" />
           <button onClick={handleGeneratePDF} disabled={generating} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground touch-target disabled:opacity-50">
             {generating ? "Generating..." : "Export PDF"}
           </button>
@@ -240,9 +266,11 @@ export default function HomeworkReview() {
             <div className="rounded-xl bg-muted p-4">
               <h3 className="mb-3 font-display font-semibold text-foreground">Needs Attention</h3>
               <div className="space-y-3">
-                {filteredAssignments.slice(0, 5).map((assignment) => {
+                {(needsReviewAssignments.length > 0 ? needsReviewAssignments : filteredAssignments).slice(0, 5).map((assignment) => {
                   const child = getChild(assignment.childId);
                   const review = assignment.monthlyPlan ? analyzeMonthlyPlanWeekOutcome(assignment) : null;
+                  const reviewableResult = assignment.results.find((result) => result.completedSuccessfully === false || (result.accuracy ?? result.score) < (result.masteryThreshold ?? 70)) || assignment.results[0];
+                  const reviewKey = reviewableResult ? `${assignment.id}-${reviewableResult.gameId}` : null;
                   return (
                     <div key={`quick-${assignment.id}`} className="rounded-xl border border-border bg-card p-3">
                       <div className="flex items-start justify-between gap-3">
@@ -257,6 +285,19 @@ export default function HomeworkReview() {
                           {assignment.status}
                         </span>
                       </div>
+                      {reviewableResult && reviewKey ? (
+                        <div className="mt-3 rounded-xl bg-muted p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-foreground">
+                              Review attempt: {getGameById(reviewableResult.gameId)?.name || reviewableResult.gameId}
+                            </p>
+                            <button onClick={() => setOpenReviewKey(openReviewKey === reviewKey ? null : reviewKey)} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
+                              {openReviewKey === reviewKey ? "Hide review" : "Open review"}
+                            </button>
+                          </div>
+                          {openReviewKey === reviewKey ? <AttemptReview result={reviewableResult} /> : null}
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -429,7 +470,10 @@ export default function HomeworkReview() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {clinicalScaleSummary.map(({ child, baseline, current, averageChange }) => (
             <div key={child.id} className="rounded-xl border border-border bg-card p-4">
-              <p className="font-semibold text-foreground">{child.avatar} {child.name}</p>
+              <p className="inline-flex items-center gap-2 font-semibold text-foreground">
+                <PersonIcon label={child.name} avatar={child.avatar} size="sm" />
+                {child.name}
+              </p>
               <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                 <p>Communication: {child.personalizationProfile.communicationLevel}</p>
                 <p>Reinforcement: {child.personalizationProfile.reinforcementType.replace(/-/g, " ")}</p>
@@ -546,7 +590,7 @@ export default function HomeworkReview() {
             <div key={assignment.id} className="rounded-xl border border-border bg-card p-4">
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xl">{child?.avatar}</span>
+                  {child ? <PersonIcon label={child.name} avatar={child.avatar} size="sm" /> : null}
                   <span className="font-display font-bold text-foreground">{child?.name}</span>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${assignment.type === "classwork" ? "bg-accent/20 text-foreground" : "bg-primary/10 text-foreground"}`}>{assignment.type}</span>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${assignment.status === "completed" ? "bg-secondary/20 text-foreground" : assignment.status === "in-progress" ? "bg-accent/20 text-foreground" : "bg-muted text-muted-foreground"}`}>{assignment.status}</span>
@@ -566,7 +610,8 @@ export default function HomeworkReview() {
 
                   return (
                     <div key={gameId} className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${done ? "bg-secondary/30 text-foreground" : "bg-muted text-muted-foreground"}`}>
-                      <span className={done ? "line-through" : ""}>{game?.emoji} {game?.name || gameId}</span>
+                      <GameIcon game={game} size="sm" />
+                      <span className={done ? "line-through" : ""}>{game?.name || gameId}</span>
                       <button onClick={() => removeGameFromAssignment(assignment.id, gameId)} className="rounded-full px-1 text-[10px] font-bold text-muted-foreground transition hover:bg-black/5 hover:text-foreground" title="Remove game from assignment">
                         X
                       </button>
@@ -579,13 +624,71 @@ export default function HomeworkReview() {
               <p className="mt-1 text-xs text-muted-foreground">Skill focus: {assignment.skillFocus.map((domain) => domain.replace("-", " ")).join(", ")}</p>
 
               {assignment.results.length > 0 ? (
-                <div className="mt-2 grid grid-cols-3 gap-2 text-xs sm:grid-cols-6">
-                  <MetricTile label="Avg Score" value={`${Math.round(assignment.results.reduce((sum, result) => sum + result.score, 0) / assignment.results.length)}`} />
-                  <MetricTile label="Interactions" value={`${assignment.results.reduce((sum, result) => sum + result.interactions, 0)}`} />
-                  <MetricTile label="Play Time" value={`${Math.round(assignment.results.reduce((sum, result) => sum + result.durationSeconds, 0) / 60)}m`} />
-                  {assignment.results.some((result) => result.attentionSpan != null) ? <MetricTile label="Attention" value={`${Math.round(assignment.results.filter((result) => result.attentionSpan != null).reduce((sum, result) => sum + (result.attentionSpan || 0), 0) / assignment.results.filter((result) => result.attentionSpan != null).length)}/10`} /> : null}
-                  {assignment.results.some((result) => result.emotionalRegulation != null) ? <MetricTile label="Emotion" value={`${Math.round(assignment.results.filter((result) => result.emotionalRegulation != null).reduce((sum, result) => sum + (result.emotionalRegulation || 0), 0) / assignment.results.filter((result) => result.emotionalRegulation != null).length)}/10`} /> : null}
-                  {assignment.results.some((result) => result.promptsNeeded != null) ? <MetricTile label="Prompts" value={`${(assignment.results.filter((result) => result.promptsNeeded != null).reduce((sum, result) => sum + (result.promptsNeeded || 0), 0) / assignment.results.filter((result) => result.promptsNeeded != null).length).toFixed(1)}`} /> : null}
+                <div className="mt-3 space-y-3">
+                  <div className="grid grid-cols-3 gap-2 text-xs sm:grid-cols-6">
+                    <MetricTile label="Avg Score" value={`${Math.round(assignment.results.reduce((sum, result) => sum + result.score, 0) / assignment.results.length)}`} />
+                    <MetricTile label="Accuracy" value={`${Math.round(assignment.results.reduce((sum, result) => sum + (result.accuracy ?? result.score), 0) / assignment.results.length)}%`} />
+                    <MetricTile label="Errors" value={`${assignment.results.reduce((sum, result) => sum + (result.errors || 0), 0)}`} />
+                    <MetricTile label="Trials" value={`${assignment.results.reduce((sum, result) => sum + (result.trials || 0), 0)}`} />
+                    <MetricTile label="Interactions" value={`${assignment.results.reduce((sum, result) => sum + result.interactions, 0)}`} />
+                    <MetricTile label="Play Time" value={`${Math.round(assignment.results.reduce((sum, result) => sum + result.durationSeconds, 0) / 60)}m`} />
+                  </div>
+                  <InsightDashboard
+                    childId={assignment.childId}
+                    results={assignment.results.map((result) => ({
+                      completedAt: result.completedAt,
+                      score: result.score,
+                      independenceRate: (result as ResultWithInsights).independenceRate,
+                    }))}
+                    traces={assignment.results
+                      .map((result) => (result as ResultWithInsights).trace)
+                      .filter((trace): trace is import("@/lib/gameAnalytics").SessionTrace => Boolean(trace))}
+                  />
+                  {assignment.results.length >= 2 ? (
+                    <div className="mt-3 rounded-xl border border-border bg-card p-3">
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Progress across sessions</p>
+                      <ResponsiveContainer width="100%" height={140}>
+                        <LineChart data={assignment.results.map((result) => ({
+                          name: result.completedAt.slice(5),
+                          Score: result.score,
+                          Independence: result.independenceRate ?? null,
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.2)" />
+                          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                          <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
+                          <Tooltip contentStyle={{ fontSize: 12, borderRadius: 12 }} />
+                          <Line type="monotone" dataKey="Score" stroke="#4daace" strokeWidth={2} dot={{ r: 3 }} />
+                          <Line type="monotone" dataKey="Independence" connectNulls stroke="#66be84" strokeWidth={2} dot={{ r: 3 }} />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : null}
+                  {assignment.results.map((result) => {
+                    const reviewKey = `${assignment.id}-${result.gameId}`;
+                    const childOutcomes = assignments
+                      .filter((a) => a.childId === assignment.childId)
+                      .flatMap((a) => a.results)
+                      .filter((r) => r.gameId === result.gameId)
+                      .sort((left, right) => left.completedAt.localeCompare(right.completedAt))
+                      .map((r) => r.completedSuccessfully !== false);
+                    const mastery = masteryStatus(childOutcomes);
+                    return (
+                      <div key={reviewKey} className="rounded-xl border border-border bg-muted p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-foreground">{getGameById(result.gameId)?.name || result.gameId}</p>
+                          <button onClick={() => setOpenReviewKey(openReviewKey === reviewKey ? null : reviewKey)} className="rounded-lg bg-card px-3 py-1.5 text-xs font-semibold text-foreground">
+                            {openReviewKey === reviewKey ? "Hide what happened" : "See what happened"}
+                          </button>
+                        </div>
+                        {openReviewKey === reviewKey ? <AttemptReview result={result} mastery={mastery} /> : null}
+                        <p className="mt-2 text-[11px] text-muted-foreground">
+                          Score {result.score} · accuracy {result.accuracy ?? result.score}% · errors {result.errors ?? 0}
+                          {result.independenceRate != null ? ` · independence ${result.independenceRate}%` : ""}
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : null}
             </div>
@@ -612,6 +715,136 @@ function MetricTile({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg bg-muted p-2 text-center">
       <p className="font-bold text-foreground">{value}</p>
       <p className="text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function AttemptReview({ result, mastery = "new" }: { result: {
+  score: number;
+  durationSeconds: number;
+  interactions: number;
+  completedSuccessfully?: boolean;
+  trials?: number;
+  correctTrials?: number;
+  errors?: number;
+  accuracy?: number;
+  masteryThreshold?: number;
+  promptsNeeded?: number;
+  attemptsBySkill?: Record<string, number>;
+  observations?: string[];
+  trace?: import("@/lib/gameAnalytics").SessionTrace;
+  insights?: import("@/lib/gameAnalytics").Insight[];
+  independenceRate?: number;
+  medianLatencyMs?: number;
+}; mastery?: import("@/lib/science").MasteryStatus }) {
+  const [tab, setTab] = useState<"overview" | "evidence" | "notes">("overview");
+  const success = result.completedSuccessfully !== false;
+  const outcomeLabel =
+    mastery === "mastered"
+      ? "Mastered ★"
+      : mastery === "generalizing" && success
+        ? "Goal met"
+        : success
+          ? "Passed"
+          : "Retry";
+  const tabs = [
+    { key: "overview" as const, label: "Overview" },
+    { key: "evidence" as const, label: "Replay & maps" },
+    { key: "notes" as const, label: "Skill notes" },
+  ];
+
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-card p-3">
+      <div className="mb-3 flex gap-1 rounded-full bg-muted p-1">
+        {tabs.map((entry) => (
+          <button
+            key={entry.key}
+            onClick={() => setTab(entry.key)}
+            aria-pressed={tab === entry.key}
+            className={`touch-target flex-1 rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors ${
+              tab === entry.key ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
+            }`}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overview" ? (
+        <>
+          <div className="mb-3 flex flex-wrap gap-2">
+            <MetricTile label="Outcome" value={outcomeLabel} />
+            <MetricTile label="Sessions toward mastery" value={`${mastery === "mastered" ? "3 of 3" : "building"}`} />
+            <MetricTile label="Score" value={`${result.score}`} />
+            <MetricTile label="Accuracy" value={`${result.accuracy ?? result.score}%`} />
+            <MetricTile label="Errors" value={`${result.errors ?? 0}`} />
+            <MetricTile label="Independence" value={`${result.independenceRate ?? result.accuracy ?? result.score}%`} />
+            <MetricTile label="Prompts" value={`${result.promptsNeeded ?? 0}`} />
+            {typeof result.medianLatencyMs === "number" && result.medianLatencyMs > 0 ? (
+              <MetricTile label="Median speed" value={result.medianLatencyMs < 1000 ? `${result.medianLatencyMs}ms` : `${(result.medianLatencyMs / 1000).toFixed(1)}s`} />
+            ) : null}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Duration {Math.round(result.durationSeconds / 60)}m · interactions {result.interactions} · mastery target {result.masteryThreshold ?? 70}%
+          </p>
+          {result.insights && result.insights.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {result.insights.map((insight) => (
+                <span
+                  key={insight.label}
+                  title={insight.detail}
+                  className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
+                    insight.tone === "good"
+                      ? "bg-emerald-100 text-emerald-800"
+                      : insight.tone === "watch"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-sky-100 text-sky-800"
+                  }`}
+                >
+                  {insight.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {tab === "evidence" ? (
+        result.trace ? (
+          <TraceInspector trace={result.trace} />
+        ) : (
+          <p className="py-3 text-sm text-muted-foreground">
+            Trial-level replay wasn't recorded for this session. Newer sessions include full replay, maps, and speed charts automatically.
+          </p>
+        )
+      ) : null}
+
+      {tab === "notes" ? (
+        <>
+          <p className="text-xs text-muted-foreground">
+            Duration {Math.round(result.durationSeconds / 60)}m · mastery target {result.masteryThreshold ?? 70}%
+            {result.promptsNeeded != null ? ` · prompts used ${result.promptsNeeded}` : ""}
+          </p>
+          {result.attemptsBySkill ? (
+            <div className="mt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Skill evidence</p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {Object.entries(result.attemptsBySkill).map(([skill, value]) => (
+                  <span key={skill} className="rounded-full bg-muted px-2 py-1 text-[10px] text-foreground">{skill.replace(/-/g, " ")}: {value}</span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {result.observations && result.observations.length > 0 ? (
+            <div className="mt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Observed during play</p>
+              <div className="mt-1 space-y-1 text-xs text-foreground">
+                {result.observations.map((observation) => <p key={observation}>- {observation}</p>)}
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

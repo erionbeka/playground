@@ -1,4 +1,4 @@
-﻿# Playground Life Grant Technical Appendix
+# Playground Life Grant Technical Appendix
 
 ## 1. What the Platform Actually Does
 
@@ -12,7 +12,7 @@ The implemented application includes:
 - Game catalog: 192 structured activities across playground/social play, matching, sequencing, sorting, tapping, construction/building, colors and shapes, counting, memory, emotions, language, motor, and daily-living practice.
 - Personalization engine: rule-based recommendations that consider child profile fields, goals, clinical support ratings, recent scores, prompt needs, regulation signals, transition difficulty, recent activity categories, and generalization needs.
 - Production backend foundation: self-hosted Node/Express API with PostgreSQL, server-side authentication, role-based authorization, request validation, audit logging, and clinic-scoped data tables.
-- Frontend integration surface: a typed API client for login, logout, session lookup, staff creation, child records, assignments, assignment approval, game-result recording, and audit-log retrieval.
+- Frontend integration surface: a typed API client and API-backed React provider for login, logout, session lookup, staff creation, child records, family/caregiver onboarding, therapy goals, assignments, assignment approval, game-result recording, and audit-log retrieval.
 
 The product should be described as a completed functional application with production backend infrastructure and integration pathways. It should not be described as a clinically proven intervention or as having completed independent compliance review until the pilot and formal reviews are complete.
 
@@ -40,7 +40,7 @@ Validation completed so far is software and workflow validation:
 - Workflow tests covering child removal, family credential creation, reusable goal templates, legacy profile normalization, monthly homework plan creation, recommendation explanations, family sign-in, classwork display, today's session view, admin invite/credential controls, admin sign-in rendering, therapist caseload sign-in, and quick-review reporting mode.
 - Game-engine smoke tests that exercise the full game catalog and confirm each configured activity can reach completion.
 - Regression tests for recognition, sorting, tapping, and building engines.
-- Backend API tests covering valid login, invalid credentials, role restrictions, child creation, parent restrictions on assignment creation, game-result recording, and audit event creation.
+- Backend API tests covering valid login, invalid credentials, role restrictions, child creation, caregiver creation, caregiver password reset restrictions, therapy goal creation/status updates, parent restrictions on assignment creation, parent-scoped assignment listing, caregiver family sessions, blocked result submission for unlinked assignments, game-result recording, and audit event creation.
 - Backend TypeScript type-checking for the Postgres API foundation.
 - Production build verification with Vite.
 - Production dependency audit using `npm audit --omit=dev`, currently reporting zero production vulnerabilities.
@@ -96,7 +96,7 @@ Playground Life is a completed functional application for therapist-assigned, pl
 
 The system stores clinic users, caregiver accounts, child profiles, family-child relationships, therapy goals, assignments, game results, personalization fields, clinical support ratings, and audit events. In production, these records are stored in Postgres. The browser-only local demo state remains for demonstration and testing and should not be used for real PHI/PII.
 
-The platform has been validated through automated software tests and workflow checks, including personalization logic, monthly plan generation, family sign-in, admin credential workflows, reporting flows, full smoke coverage of the activity catalog, and backend API authorization/authentication tests. The latest validation pass includes 222 automated tests, server type-checking, production build verification, linting with no errors, and zero production dependency vulnerabilities.
+The platform has been validated through automated software tests and workflow checks, including personalization logic, monthly plan generation, family sign-in, admin credential workflows, reporting flows, full smoke coverage of the activity catalog, and backend API authorization/authentication tests. The latest validation pass includes 228 automated tests, server type-checking, production build verification, linting with no errors, and zero production dependency vulnerabilities.
 
 The platform has implemented core security architecture and has draft data-governance and review plans, but it has not yet completed an independent security audit, HIPAA risk analysis, DPIA, or formal data protection review. Those reviews should be completed before real-world clinical deployment.
 

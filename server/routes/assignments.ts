@@ -36,6 +36,24 @@ const resultSchema = z.object({
 });
 
 router.get("/", requireAuth, async (req, res) => {
+  if (req.user?.role === "parent") {
+    const result = await query(
+      `SELECT assignments.*
+       FROM assignments
+       JOIN family_child_links links
+         ON links.child_id = assignments.child_id
+        AND links.user_id = $2
+       WHERE assignments.clinic_id = $1
+         AND (
+           assignments.assigned_family_user_id IS NULL
+           OR assignments.assigned_family_user_id = $2
+         )
+       ORDER BY assignments.created_at DESC`,
+      [req.user.clinicId, req.user.id]
+    );
+    return res.json({ assignments: result.rows });
+  }
+
   const result = await query(
     `SELECT * FROM assignments WHERE clinic_id = $1 ORDER BY created_at DESC`,
     [req.user?.clinicId]
@@ -99,8 +117,20 @@ router.post("/:id/results", requireAuth, async (req, res) => {
   const assignmentId = String(req.params.id);
 
   const assignment = await query<{ id: string; child_id: string; game_ids: string[] }>(
-    `SELECT id, child_id, game_ids FROM assignments WHERE id = $1 AND clinic_id = $2`,
-    [assignmentId, req.user?.clinicId]
+    req.user?.role === "parent"
+      ? `SELECT assignments.id, assignments.child_id, assignments.game_ids
+         FROM assignments
+         JOIN family_child_links links
+           ON links.child_id = assignments.child_id
+          AND links.user_id = $3
+         WHERE assignments.id = $1
+           AND assignments.clinic_id = $2
+           AND (
+             assignments.assigned_family_user_id IS NULL
+             OR assignments.assigned_family_user_id = $3
+           )`
+      : `SELECT id, child_id, game_ids FROM assignments WHERE id = $1 AND clinic_id = $2`,
+    req.user?.role === "parent" ? [assignmentId, req.user?.clinicId, req.user?.id] : [assignmentId, req.user?.clinicId]
   );
   if (!assignment.rows[0]) return res.status(404).json({ error: "Assignment not found" });
 
@@ -125,7 +155,18 @@ router.post("/:id/results", requireAuth, async (req, res) => {
   await query(
     `UPDATE assignments
      SET status = CASE
-       WHEN (SELECT count(*) FROM game_results WHERE assignment_id = $1) >= cardinality(game_ids) THEN 'completed'::assignment_status
+       WHEN (
+         SELECT count(*)
+         FROM game_results
+         WHERE assignment_id = $1
+           AND coalesce((metrics->>'completedSuccessfully')::boolean, true) = true
+       ) >= cardinality(game_ids) THEN 'completed'::assignment_status
+       WHEN (
+         SELECT count(*)
+         FROM game_results
+         WHERE assignment_id = $1
+           AND coalesce((metrics->>'completedSuccessfully')::boolean, true) = true
+       ) = 0 THEN 'pending'::assignment_status
        ELSE 'in-progress'::assignment_status
     END,
      updated_at = now()
@@ -135,6 +176,26 @@ router.post("/:id/results", requireAuth, async (req, res) => {
 
   await writeAudit(req, "game_result_recorded", "result", assignmentId, { gameId: parsed.data.gameId, score: parsed.data.score });
   return res.status(201).json({ assignmentId, gameId: parsed.data.gameId });
+});
+
+router.delete("/:id/games/:gameId", requireAuth, requireRole("admin", "therapist"), async (req, res) => {
+  const assignmentId = String(req.params.id);
+  const gameId = String(req.params.gameId);
+
+  const updated = await query<{ id: string }>(
+    `UPDATE assignments
+     SET game_ids = array_remove(game_ids, $1),
+         updated_at = now()
+     WHERE id = $2 AND clinic_id = $3 AND cardinality(game_ids) > 1
+     RETURNING id`,
+    [gameId, assignmentId, req.user?.clinicId]
+  );
+
+  if (!updated.rows[0]) return res.status(404).json({ error: "Assignment or removable game not found" });
+
+  await query("DELETE FROM game_results WHERE assignment_id = $1 AND game_id = $2", [assignmentId, gameId]);
+  await writeAudit(req, "assignment_game_removed", "assignment", assignmentId, { gameId });
+  return res.status(204).send();
 });
 
 export default router;

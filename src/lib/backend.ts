@@ -1,5 +1,6 @@
 import type { AuditEntry, Child, HomeworkAssignment } from "@/context/AppContext";
 import type { AuthSession } from "@/lib/auth";
+import { readSnapshot, writeSnapshot } from "@/lib/secureVault";
 
 export interface AdminUser {
   id: string;
@@ -30,18 +31,28 @@ const APP_DATA_STORAGE_KEY = "playground-life.backend.v2";
 export function loadAppData(defaultData: AppDataSnapshot): AppDataSnapshot {
   if (typeof window === "undefined") return defaultData;
 
+  // Legacy/plaintext key stays authoritative whenever present (migration source + tests);
+  // loading through it re-seeds the encrypted vault.
   try {
     const raw = window.localStorage.getItem(APP_DATA_STORAGE_KEY);
-    if (!raw) return defaultData;
-    return { ...defaultData, ...(JSON.parse(raw) as AppDataSnapshot) };
+    if (raw) {
+      const parsed = { ...defaultData, ...(JSON.parse(raw) as AppDataSnapshot) };
+      void writeSnapshot(parsed);
+      return parsed;
+    }
   } catch {
-    return defaultData;
+    /* fall through to vault */
   }
+
+  const fromVault = readSnapshot<AppDataSnapshot>();
+  if (fromVault) return { ...defaultData, ...fromVault };
+
+  return defaultData;
 }
 
 export function saveAppData(snapshot: AppDataSnapshot) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(APP_DATA_STORAGE_KEY, JSON.stringify(snapshot));
+  void writeSnapshot(snapshot);
 }
 
 export function createAuditEntry(

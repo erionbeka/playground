@@ -1,4 +1,4 @@
-﻿import cookieParser from "cookie-parser";
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { type ErrorRequestHandler } from "express";
 import rateLimit from "express-rate-limit";
@@ -8,6 +8,13 @@ import authRoutes from "./routes/auth.ts";
 import childrenRoutes from "./routes/children.ts";
 import assignmentRoutes from "./routes/assignments.ts";
 import auditRoutes from "./routes/audit.ts";
+import familyRoutes from "./routes/families.ts";
+import familySessionRoutes from "./routes/familySession.ts";
+import goalRoutes from "./routes/goals.ts";
+import { childDataRoutes } from "./routes/childData.ts";
+import { rewardRoutes } from "./routes/rewards.ts";
+import { securityRoutes } from "./routes/security.ts";
+import { adminComplianceRoutes } from "./routes/admin-compliance.ts";
 
 export function createApp() {
   const app = express();
@@ -22,8 +29,15 @@ export function createApp() {
   app.get("/health", (_req, res) => res.json({ ok: true }));
   app.use("/api/auth", authRoutes);
   app.use("/api/children", childrenRoutes);
+  app.use("/api/children", childDataRoutes);
+  app.use("/api/children", rewardRoutes);
+  app.use("/api/families", familyRoutes);
+  app.use("/api/family", familySessionRoutes);
+  app.use("/api/goals", goalRoutes);
   app.use("/api/assignments", assignmentRoutes);
   app.use("/api/audit", auditRoutes);
+  app.use("/api/security", securityRoutes);
+  app.use("/api/admin/compliance", adminComplianceRoutes);
 
   const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     console.error(error);

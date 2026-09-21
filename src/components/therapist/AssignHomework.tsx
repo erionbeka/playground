@@ -4,6 +4,9 @@ import { allGames, categoryMeta, GameCategory, Difficulty } from "@/data/games";
 import { motion, AnimatePresence } from "framer-motion";
 import { buildMonthlyPlan, getPersonalizationSummary } from "@/lib/personalization";
 import { getGameSkillDomains } from "@/lib/skills";
+import { getTunables } from "@/lib/tunables";
+import { buildSessionPlan } from "@/lib/sessionPlan";
+import { GameIcon } from "@/components/icons/AppIcon";
 
 const categories = Object.entries(categoryMeta) as [GameCategory, typeof categoryMeta[GameCategory]][];
 type CatalogPathway = "recommended" | "goal-based" | "recent-success" | "needs-generalization" | "all";
@@ -35,6 +38,13 @@ export default function AssignHomework() {
   const [catalogPathway, setCatalogPathway] = useState<CatalogPathway>("recommended");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [tuning, setTuning] = useState<Record<string, Record<string, unknown>>>({});
+  const [tunedGameId, setTunedGameId] = useState<string | null>(null);
+  const sessionPlan = useMemo(() => {
+    const child = children.find((entry) => entry.id === childId);
+    if (!child) return null;
+    return buildSessionPlan(child, assignments);
+  }, [assignments, childId, children]);
 
   const selectedChild = children.find((child) => child.id === childId);
   const activeGoalDomains = useMemo<SkillDomain[]>(
@@ -80,19 +90,18 @@ export default function AssignHomework() {
       ? pathwayGames
       : pathwayGames.filter((game) => game.category === filterCategory);
 
-    const fallback = source.length > 0 ? source : availableGames;
-    return [...fallback].sort(
+    return [...source].sort(
       (left, right) => personalizedOrder.indexOf(left.id) - personalizedOrder.indexOf(right.id)
     );
-  }, [availableGames, filterCategory, pathwayGames, personalizedOrder]);
+  }, [filterCategory, pathwayGames, personalizedOrder]);
 
   const categoryCounts = useMemo(
     () =>
       categories.reduce<Record<string, number>>((counts, [key]) => {
-        counts[key] = availableGames.filter((game) => game.category === key).length;
+        counts[key] = pathwayGames.filter((game) => game.category === key).length;
         return counts;
       }, {}),
-    [availableGames]
+    [pathwayGames]
   );
 
   useEffect(() => {
@@ -188,6 +197,7 @@ export default function AssignHomework() {
         skillFocus: Array.from(new Set([...selectedSkillFocus, ...weekGames.flatMap((gameId) => getGameSkillDomains(gameId))])),
         supportLevel,
         systemSuggestedDifficulty: personalization.recommendedDifficulty,
+        tuning: Object.keys(tuning).length > 0 ? tuning : undefined,
         monthlyPlan: monthlyPlanWeek ? {
           weekNumber: monthlyPlanWeek.weekNumber,
           objective: monthlyPlanWeek.objective,
@@ -215,225 +225,138 @@ export default function AssignHomework() {
 
     setSelectedGames([]);
     setNotes("");
+    setTuning({});
+    setTunedGameId(null);
     setSuccess(true);
     window.setTimeout(() => setSuccess(false), 3000);
   };
 
   return (
     <div>
-      <h2 className="mb-6 font-display text-lg font-bold text-foreground">Assign Homework</h2>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <h2 className="font-display text-lg font-bold text-foreground">Assign Homework</h2>
+      <div className="flex items-center gap-2">
+        <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
+          {showAdvanced ? "Advanced" : "Quick assign"}
+        </span>
+        <button
+          onClick={() => setShowAdvanced((current) => !current)}
+          className="touch-target rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-foreground"
+        >
+          {showAdvanced ? "Hide extras" : "Show more"}
+        </button>
+      </div>
+    </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-foreground">Child</label>
-            <select value={childId} onChange={(event) => { setChildId(event.target.value); setAssignedFamilyMemberId(""); }} className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground">
-              {children.map((child) => (
-                <option key={child.id} value={child.id}>
-                  {child.avatar} {child.name}
-                </option>
-              ))}
-            </select>
-          </div>
+    <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <label className="block">
+        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Child</span>
+        <select value={childId} onChange={(event) => { setChildId(event.target.value); setAssignedFamilyMemberId(""); }} className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground">
+          {children.map((child) => (
+            <option key={child.id} value={child.id}>{child.name}</option>
+          ))}
+        </select>
+      </label>
 
-          {personalization ? (
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Personalized Path</p>
-              <p className="mt-1 font-display text-base font-bold text-foreground capitalize">
-                {personalization.progressionStage} stage - target {personalization.recommendedDifficulty}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Avg score {personalization.avgScore}% with {personalization.completedGamesCount} completed games.
-              </p>
-              <p className="mt-2 text-xs font-semibold text-foreground">
-                Readiness: {personalization.readiness.stage} - support {personalization.readiness.supportNeed}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {personalization.therapistSummary}
-              </p>
-              {personalization.preferredCategories.length > 0 ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Strengths: {personalization.preferredCategories.map((category) => categoryMeta[category].label).join(", ")}
-                </p>
-              ) : null}
-              {personalization.nextChallengeCategories.length > 0 ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Next challenge: {personalization.nextChallengeCategories.map((category) => categoryMeta[category].label).join(", ")}
-                </p>
-              ) : null}
-              {personalization.rotationCategories.length > 0 ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Rotate into: {personalization.rotationCategories.map((category) => categoryMeta[category].label).join(", ")}
-                </p>
-              ) : null}
-              <p className="mt-1 text-xs text-muted-foreground">
-                Skill focus: {selectedSkillFocus.map((domain) => domain.replace("-", " ")).join(", ")}
-              </p>
-              {personalization.recommendationReasons.length > 0 ? (
-                <div className="mt-3 rounded-lg bg-white/65 p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">Why this was recommended</p>
-                  <div className="mt-2 space-y-1 text-xs text-foreground">
-                    {personalization.recommendationReasons.slice(0, 3).map((reason) => (
-                      <p key={reason}>- {reason}</p>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              <button onClick={applyPersonalizedPlan} className="mt-3 touch-target rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground">
-                Use Personalized Plan
-              </button>
-            </div>
-          ) : null}
+      <label className="block">
+        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{planType === "monthly" ? "Start Date" : "Due Date"}</span>
+        <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground" />
+      </label>
 
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Assign View</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{showAdvanced ? "Advanced planning" : "Quick assign"}</p>
-              </div>
-              <button
-                onClick={() => setShowAdvanced((current) => !current)}
-                className="touch-target rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-foreground"
-              >
-                {showAdvanced ? "Hide extras" : "Show more"}
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Quick assign keeps the therapist flow focused on child, pathway, categories, and selected games. Open extras only when you need manual adjustments.
+      <div>
+        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Difficulty</span>
+        <div className="flex gap-1.5">
+          {(["easy", "medium", "hard"] as Difficulty[]).map((entry) => (
+            <button key={entry} onClick={() => setDifficulty(entry)} className={`touch-target flex-1 rounded-xl px-2 py-2.5 text-xs font-semibold capitalize transition-colors ${difficulty === entry ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+              {entry}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Plan</span>
+        <div className="flex gap-1.5">
+          <button onClick={() => setPlanType("single")} className={`touch-target flex-1 rounded-xl px-2 py-2.5 text-xs font-semibold transition-colors ${planType === "single" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+            One Time
+          </button>
+          <button onClick={() => setPlanType("monthly")} className={`touch-target flex-1 rounded-xl px-2 py-2.5 text-xs font-semibold transition-colors ${planType === "monthly" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+            Monthly Plan
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="space-y-4">
+        {personalization ? (
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+            <p className="font-display text-base font-bold capitalize text-foreground">
+              {personalization.progressionStage} stage · target {personalization.recommendedDifficulty}
             </p>
-          </div>
+            <p className="mt-1 text-xs font-semibold text-foreground">
+              Readiness: {personalization.readiness.stage} - support {personalization.readiness.supportNeed}
+            </p>
 
-          {pendingApprovals.length > 0 ? (
-            <div className="rounded-xl border border-amber-300/50 bg-amber-50/80 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700">Pending Approval Queue</p>
+            {sessionPlan ? (
               <div className="mt-3 space-y-2">
-                {pendingApprovals.slice(0, 3).map((assignment) => (
-                  <div key={assignment.id} className="rounded-lg bg-white/80 p-3 text-xs text-foreground">
-                    <p className="font-semibold">{assignment.gameIds.length} games · {assignment.difficulty} · due {assignment.dueDate}</p>
-                    <p className="mt-1 text-muted-foreground">
-                      Focus: {assignment.skillFocus.map((domain) => domain.replace("-", " ")).join(", ")}
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">Suggested session plan</p>
+                {sessionPlan.sections.map((section) => (
+                  <div key={section.bucket} className="rounded-xl bg-white/65 p-3">
+                    <p className="text-xs font-bold text-foreground">
+                      {section.label}
+                      <span className="ml-2 font-normal text-muted-foreground">{section.reason}</span>
                     </p>
-                    <div className="mt-2 flex gap-2">
-                      <button onClick={() => approveAssignment(assignment.id, "approved")} className="rounded-lg bg-primary px-3 py-1.5 font-semibold text-primary-foreground">
-                        Approve
-                      </button>
-                      <button onClick={() => approveAssignment(assignment.id, "adjusted", difficulty)} className="rounded-lg bg-muted px-3 py-1.5 font-semibold text-foreground">
-                        Approve + {difficulty}
-                      </button>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {section.games.map((game) => (
+                        <button
+                          key={game.id}
+                          onClick={() => {
+                            setSelectedGames((currentSelected) => currentSelected.includes(game.id) ? currentSelected : [...currentSelected, game.id]);
+                          }}
+                          disabled={selectedGames.includes(game.id)}
+                          className={`touch-target inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                            selectedGames.includes(game.id)
+                              ? "bg-secondary/25 text-foreground"
+                              : "bg-muted text-foreground hover:bg-secondary/20"
+                          }`}
+                        >
+                          <GameIcon game={game} size="sm" />
+                          {game.name}
+                          {selectedGames.includes(game.id) ? " ✓" : " +"}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
-          ) : null}
-
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-foreground">Plan Length</label>
-            <div className="flex gap-2">
-              <button onClick={() => setPlanType("single")} className={`touch-target rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${planType === "single" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                One Time
-              </button>
-              <button onClick={() => setPlanType("monthly")} className={`touch-target rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${planType === "monthly" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                Monthly Plan
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-foreground">{planType === "monthly" ? "Start Date" : "Due Date"}</label>
-            <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground" />
-            {planType === "monthly" ? (
-              <p className="mt-2 text-xs text-muted-foreground">Creates 4 weekly assignments with objectives, support guidance, and therapist review points.</p>
             ) : null}
-          </div>
 
-          {showAdvanced ? (
-            <>
-              {selectedChild && selectedChild.familyMembers.length > 0 ? (
-                <div>
-                  <label className="mb-1 block text-sm font-semibold text-foreground">Assign to Family Member</label>
-                  <select value={assignedFamilyMemberId} onChange={(event) => setAssignedFamilyMemberId(event.target.value)} className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground">
-                    <option value="">Anyone in family</option>
-                    {selectedChild.familyMembers.map((familyMember) => (
-                      <option key={familyMember.id} value={familyMember.id}>
-                        {familyMember.avatar} {familyMember.name} ({relationshipLabels[familyMember.relationship] || familyMember.relationship})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-foreground">Difficulty</label>
-                <div className="flex gap-2">
-                  {(["easy", "medium", "hard"] as Difficulty[]).map((entry) => (
-                    <button key={entry} onClick={() => setDifficulty(entry)} className={`touch-target rounded-lg px-4 py-2 text-sm font-semibold capitalize transition-colors ${difficulty === entry ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                      {entry}
-                    </button>
+            {personalization.recommendationReasons.length > 0 ? (
+              <details className="mt-3 rounded-xl bg-white/65 p-3">
+                <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">Why this was recommended</summary>
+                <div className="mt-2 space-y-1 text-xs text-foreground">
+                  {personalization.recommendationReasons.slice(0, 3).map((reason) => (
+                    <p key={reason}>· {reason}</p>
                   ))}
                 </div>
-              </div>
+              </details>
+            ) : null}
 
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-foreground">Mode</label>
-                <div className="flex gap-2">
-                  <button onClick={() => setMode("single")} className={`touch-target rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${mode === "single" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                    Solo
-                  </button>
-                  <button onClick={() => setMode("shared")} className={`touch-target rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${mode === "shared" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                    With Family
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-foreground">Therapist Support Level</label>
-                <div className="flex gap-2">
-                  {(["high", "moderate", "light"] as const).map((entry) => (
-                    <button key={entry} onClick={() => setSupportLevel(entry)} className={`touch-target rounded-lg px-4 py-2 text-sm font-semibold capitalize transition-colors ${supportLevel === entry ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                      {entry}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  High keeps more cues visible. Light removes more prompts for model-copying, shape builds, and tap challenges.
-                </p>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-foreground">Notes for Family</label>
-                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className="w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-foreground" placeholder="Tips, focus areas..." />
-              </div>
-            </>
-          ) : (
-            <div className="rounded-xl bg-muted p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Quick assign settings</p>
-              <p className="mt-2 text-sm text-foreground">
-                {difficulty} difficulty, {mode === "shared" ? "with family" : "solo"}, {supportLevel} support
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Open advanced planning if you want to manually change support, family member assignment, or therapist notes.
-              </p>
-            </div>
-          )}
-
-          <div className="rounded-xl bg-muted p-4">
-            <p className="mb-1 text-sm font-semibold text-foreground">Selected: {selectedGames.length} games</p>
-            <div className="flex flex-wrap gap-1">
-              {selectedGames.map((gameId) => {
-                const game = availableGames.find((entry) => entry.id === gameId) || allGames.find((entry) => entry.id === gameId);
-                return game ? (
-                  <span key={gameId} className="rounded-full bg-primary/10 px-2 py-1 text-xs text-foreground">
-                    {game.emoji} {game.name}
-                  </span>
-                ) : null;
-              })}
-            </div>
+            <button onClick={applyPersonalizedPlan} className="mt-3 touch-target rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground">
+              Use Personalized Plan
+            </button>
           </div>
+        ) : null}
 
-          <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Catalog Pathway</p>
-            <div className="mt-3 flex flex-wrap gap-2">
+        <div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <select
+              value={catalogPathway}
+              onChange={(event) => setCatalogPathway(event.target.value as CatalogPathway)}
+              aria-label="Catalog pathway"
+              className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground"
+            >
               {([
                 ["recommended", "Recommended"],
                 ["goal-based", "Goal-Based"],
@@ -441,49 +364,261 @@ export default function AssignHomework() {
                 ["needs-generalization", "Needs Generalization"],
                 ["all", "All Games"],
               ] as Array<[CatalogPathway, string]>).map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setCatalogPathway(key)}
-                  className={`touch-target rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${catalogPathway === key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
-                >
-                  {label}
-                </button>
+                <option key={key} value={key}>{label}</option>
               ))}
+            </select>
+            <select
+              value={filterCategory}
+              onChange={(event) => setFilterCategory(event.target.value as GameCategory | "all")}
+              aria-label="Filter by category"
+              className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold capitalize text-foreground"
+            >
+              <option value="all">{mode === "shared" ? "Shared Games" : "All Categories"}</option>
+              {categories.map(([key, meta]) => (
+                <option key={key} value={key}>{meta.label} ({categoryCounts[key] || 0})</option>
+              ))}
+            </select>
+          </div>
+
+          {filteredGames.length > 0 ? (
+            <div className="grid max-h-[560px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3 xl:grid-cols-4">
+              {filteredGames.map((game) => {
+                const isRecommended = personalization?.recommendedGames.slice(0, 6).some((entry) => entry.id === game.id);
+                return (
+                  <button
+                    key={game.id}
+                    onClick={() => toggleGame(game.id)}
+                    className={`touch-target rounded-2xl border-2 p-3 text-left transition-all ${
+                      selectedGames.includes(game.id)
+                        ? "border-primary bg-primary/10 shadow-md"
+                        : "border-border bg-card hover:border-primary/30"
+                    }`}
+                  >
+                    <div className="mb-1 flex items-start justify-between gap-2">
+                      <GameIcon game={game} size="md" />
+                      {isRecommended ? <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">★</span> : null}
+                    </div>
+                    <p className="text-xs font-bold leading-tight text-foreground">{game.name}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">{game.estimatedMinutes} min · {game.difficulty}</p>
+                  </button>
+                );
+              })}
             </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Start from the pathway first, then narrow by category only if needed.
-              </p>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border bg-card/60 p-6 text-center">
+              <p className="text-sm font-semibold text-foreground">Nothing here in {mode === "shared" ? "With Family" : "Solo"} mode</p>
+              <p className="mt-1 text-xs text-muted-foreground">This category exists, but its games need the other mode.</p>
+              <button
+                onClick={() => setMode(mode === "shared" ? "single" : "shared")}
+                className="touch-target mt-3 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              >
+                Switch to {mode === "shared" ? "Solo" : "With Family"}
+              </button>
             </div>
+          )}
 
           {planType === "monthly" && monthlyPlanPreview.length > 0 ? (
-            <div className="rounded-xl border border-border bg-card p-4">
+            <div className="mt-4 rounded-2xl border border-border bg-card p-4">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Monthly Program Preview</p>
-              <div className="mt-3 space-y-3">
+              <div className="mt-3 space-y-2">
                 {monthlyPlanPreview.map((week) => (
-                  <div key={`week-${week.weekNumber}`} className="rounded-xl bg-muted p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">Week {week.weekNumber}: {week.objective}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{week.rationale}</p>
-                      </div>
-                      <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-foreground">{week.difficulty}</span>
+                  <div key={`week-${week.weekNumber}`} className="flex items-start justify-between gap-3 rounded-xl bg-muted p-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">W{week.weekNumber} · {week.objective}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{week.adultSupport} · {week.sessionLengthMinutes} min</p>
                     </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                      <p>Support: {week.supportLevel}</p>
-                      <p>Assigned support: {supportLevel}</p>
-                      <p>Adult role: {week.adultSupport}</p>
-                      <p>Session: {week.sessionLengthMinutes} min</p>
-                      <p>Decision: {week.progressionDecision}</p>
-                    </div>
-                    <p className="mt-2 text-[11px] text-foreground">Family guidance: {week.familyGuidance[0]}</p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">Success marker: {week.successMarkers[0]}</p>
+                    <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold text-foreground">{week.difficulty}</span>
                   </div>
                 ))}
               </div>
             </div>
           ) : null}
+        </div>
+      </div>
 
-          <button onClick={handleAssign} disabled={selectedGames.length === 0 || !childId} className="touch-target w-full rounded-xl bg-primary py-3 text-base font-bold text-primary-foreground disabled:opacity-50">
+      <aside className="space-y-4 lg:sticky lg:top-20">
+        {pendingApprovals.length > 0 ? (
+          <div className="rounded-2xl border border-amber-300/50 bg-amber-50/80 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700">Approvals ({pendingApprovals.length})</p>
+            <div className="mt-2 space-y-2">
+              {pendingApprovals.slice(0, 3).map((assignment) => (
+                <div key={assignment.id} className="rounded-xl bg-white/85 p-3 text-xs text-foreground">
+                  <p className="font-semibold">{assignment.gameIds.length} games · due {assignment.dueDate}</p>
+                  <div className="mt-2 flex gap-2">
+                    <button onClick={() => approveAssignment(assignment.id, "approved")} className="rounded-lg bg-primary px-3 py-1.5 font-semibold text-primary-foreground">
+                      Approve
+                    </button>
+                    <button onClick={() => approveAssignment(assignment.id, "adjusted", difficulty)} className="rounded-lg bg-muted px-3 py-1.5 font-semibold text-foreground">
+                      + {difficulty}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="mb-2 text-sm font-bold text-foreground">Session ({selectedGames.length})</p>
+          {selectedGames.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Pick games from the plan or catalog.</p>
+          ) : null}
+          <div className="flex flex-wrap gap-1.5">
+            {selectedGames.map((gameId) => {
+              const game = availableGames.find((entry) => entry.id === gameId) || allGames.find((entry) => entry.id === gameId);
+              if (!game) return null;
+              const tuned = tuning[gameId];
+              const tunable = getTunables(game.engine);
+              return (
+                <button
+                  key={gameId}
+                  onClick={() => setTunedGameId(tunedGameId === gameId ? null : gameId)}
+                  className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs transition-colors ${
+                    tunedGameId === gameId
+                      ? "bg-primary text-primary-foreground"
+                      : tuned
+                        ? "bg-secondary/20 text-foreground ring-1 ring-secondary/50"
+                        : "bg-primary/10 text-foreground"
+                  }`}
+                >
+                  <GameIcon game={game} size="sm" />
+                  {game.name}
+                  {tuned ? <span aria-hidden="true">⚙️</span> : tunable ? <span aria-hidden="true" className="opacity-50">⚙︎</span> : null}
+                </button>
+              );
+            })}
+          </div>
+
+          {(() => {
+            if (!tunedGameId) return null;
+            const game = availableGames.find((entry) => entry.id === tunedGameId) || allGames.find((entry) => entry.id === tunedGameId);
+            if (!game) return null;
+            const tunable = getTunables(game.engine);
+            if (!tunable) {
+              return (
+                <p className="mt-3 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  {game.name} adapts automatically for this child.
+                </p>
+              );
+            }
+            const current = tuning[tunedGameId] || {};
+            return (
+              <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="mt-3 rounded-xl border border-border bg-background p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-foreground">Tailor: {game.name}</p>
+                  {tuning[tunedGameId] ? (
+                    <button
+                      onClick={() => {
+                        setTuning((currentTuning) => {
+                          const next = { ...currentTuning };
+                          delete next[tunedGameId];
+                          return next;
+                        });
+                      }}
+                      className="text-[11px] font-semibold text-muted-foreground underline hover:text-foreground"
+                    >
+                      Reset
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-3 space-y-3">
+                  {tunable.fields.map((field) => {
+                    const value = current[field.key];
+                    if (field.type === "slider") {
+                      return (
+                        <label key={field.key} className="block">
+                          <span className="flex items-center justify-between text-xs font-semibold text-foreground">
+                            {field.label}
+                            <span className="font-black text-primary">{String(value ?? field.min ?? 0)}</span>
+                          </span>
+                          <input
+                            type="range"
+                            min={field.min}
+                            max={field.max}
+                            step={field.step}
+                            value={Number(value ?? field.min ?? 0)}
+                            onChange={(event) => setTuning((prev) => ({
+                              ...prev,
+                              [tunedGameId]: { ...prev[tunedGameId], [field.key]: Number(event.target.value) },
+                            }))}
+                            className="mt-1 w-full accent-primary"
+                          />
+                        </label>
+                      );
+                    }
+                    return (
+                      <label key={field.key} className="block">
+                        <span className="text-xs font-semibold text-foreground">{field.label}</span>
+                        <select
+                          value={String(value ?? "")}
+                          onChange={(event) => setTuning((prev) => {
+                            const nextValue = event.target.value;
+                            const nextGame = { ...prev[tunedGameId] };
+                            if (nextValue === "") delete nextGame[field.key];
+                            else nextGame[field.key] = nextValue;
+                            return { ...prev, [tunedGameId]: nextGame };
+                          })}
+                          className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                        >
+                          {(field.options || []).map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            );
+          })()}
+
+          {showAdvanced ? (
+            <div className="mt-4 space-y-3 border-t border-border pt-3">
+              {selectedChild && selectedChild.familyMembers.length > 0 ? (
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Family member</span>
+                  <select value={assignedFamilyMemberId} onChange={(event) => setAssignedFamilyMemberId(event.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground">
+                    <option value="">Anyone in family</option>
+                    {selectedChild.familyMembers.map((familyMember) => (
+                      <option key={familyMember.id} value={familyMember.id}>
+                        {familyMember.name} ({relationshipLabels[familyMember.relationship] || familyMember.relationship})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              <div>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Support</span>
+                <div className="flex gap-1.5">
+                  {(["high", "moderate", "light"] as const).map((entry) => (
+                    <button key={entry} onClick={() => setSupportLevel(entry)} className={`touch-target flex-1 rounded-lg px-2 py-2 text-xs font-semibold capitalize transition-colors ${supportLevel === entry ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                      {entry}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Mode</span>
+                <div className="flex gap-1.5">
+                  <button onClick={() => setMode("single")} className={`touch-target flex-1 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${mode === "single" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                    Solo
+                  </button>
+                  <button onClick={() => setMode("shared")} className={`touch-target flex-1 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${mode === "shared" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                    With Family
+                  </button>
+                </div>
+              </div>
+
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Notes for family</span>
+                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground" placeholder="Tips, focus areas..." />
+              </label>
+            </div>
+          ) : null}
+
+          <button onClick={handleAssign} disabled={selectedGames.length === 0 || !childId} className="touch-target mt-4 w-full rounded-xl bg-primary py-3 text-base font-bold text-primary-foreground disabled:opacity-50">
             {planType === "monthly" ? `Create Progressive Monthly Plan (${selectedGames.length} games)` : `Assign Homework (${selectedGames.length} games)`}
           </button>
 
@@ -495,61 +630,8 @@ export default function AssignHomework() {
             ) : null}
           </AnimatePresence>
         </div>
-
-        <div className="lg:col-span-2">
-          <div className="mb-4 flex flex-wrap gap-2">
-            <button onClick={() => setFilterCategory("all")} className={`touch-target rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${filterCategory === "all" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-              {mode === "shared" ? "Shared Games" : "All"}
-            </button>
-            {categories.map(([key, meta]) => (
-              <button key={key} onClick={() => setFilterCategory(key)} className={`touch-target rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${filterCategory === key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                {meta.emoji} {meta.label} ({categoryCounts[key] || 0})
-              </button>
-            ))}
-          </div>
-
-          {filteredGames.length > 0 ? (
-            <div className="grid max-h-[520px] grid-cols-2 gap-2 overflow-y-auto pr-2 sm:grid-cols-3 md:grid-cols-4">
-              {filteredGames.map((game) => {
-                const isRecommended = personalization?.recommendedGames.slice(0, 6).some((entry) => entry.id === game.id);
-                const isMastered = personalization?.masteredGameIds.includes(game.id) || false;
-
-                return (
-                  <button
-                    key={game.id}
-                    onClick={() => toggleGame(game.id)}
-                    className={`touch-target rounded-xl border-2 p-3 text-left transition-all ${
-                      selectedGames.includes(game.id)
-                        ? "border-primary bg-primary/10 shadow-md"
-                        : "border-border bg-card hover:border-primary/30"
-                    }`}
-                  >
-                    <div className="mb-1 flex items-start justify-between gap-2">
-                      <span className="text-2xl">{game.emoji}</span>
-                      {isRecommended ? <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Recommended</span> : null}
-                    </div>
-                    <p className="text-xs font-bold leading-tight text-foreground">{game.name}</p>
-                    <p className="mt-0.5 text-[10px] text-muted-foreground">{game.estimatedMinutes} min - {game.difficulty}</p>
-                    {isMastered ? <p className="mt-1 text-[10px] text-muted-foreground">Previously completed</p> : null}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-border bg-card/60 p-6 text-center">
-              <p className="mb-2 font-display text-lg font-bold text-foreground">No games available in this view</p>
-              <p className="mb-4 text-sm text-muted-foreground">
-                {mode === "shared" ? "Try Solo mode to see more independent learning activities." : "Switch categories to browse more activities."}
-              </p>
-              {mode === "shared" ? (
-                <button onClick={() => setMode("single")} className="touch-target rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
-                  Switch to Solo
-                </button>
-              ) : null}
-            </div>
-          )}
-        </div>
-      </div>
+      </aside>
     </div>
+  </div>
   );
 }

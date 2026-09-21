@@ -1,5 +1,11 @@
 import { createRoot } from "react-dom/client";
-import App from "./App.tsx";
+import App from "./App";
+import { initVault } from "./lib/secureVault";
 import "./index.css";
 
-createRoot(document.getElementById("root")!).render(<App />);
+async function boot() {
+  await initVault();
+  createRoot(document.getElementById("root")!).render(<App />);
+}
+
+void boot();

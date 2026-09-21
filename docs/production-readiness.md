@@ -1,4 +1,4 @@
-﻿# Production Readiness Plan
+# Production Readiness Plan
 
 Playground Life now has a Postgres-backed production API foundation in addition to the existing React application. This document distinguishes between what is implemented, what is validated, and what must still be completed before handling real clinic or child data.
 
@@ -14,7 +14,7 @@ Playground Life now has a Postgres-backed production API foundation in addition 
 - Security middleware: Helmet, CORS allowlist, JSON body size limits, cookie parsing, and rate limiting.
 - Server-side audit logging for sign-in, sign-out, staff creation, child creation, assignment creation, assignment approval, and game result recording.
 - Migration and seed scripts for a self-hosted Postgres environment.
-- Typed frontend API client under `src/lib/productionApi.ts` for auth, children, assignments, results, and audit logs.
+- Typed frontend API client under `src/lib/productionApi.ts` and API-backed React provider under `src/context/ApiAppProvider.tsx` for auth, children, families/caregivers, therapy goals, assignments, results, and audit logs.
 - Backend API tests under `server/server.test.ts`.
 
 ## Commands
@@ -27,7 +27,7 @@ npm run dev:api
 npm run dev
 ```
 
-The API expects `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, and cookie settings in `.env`. The frontend API client uses `VITE_API_URL` and defaults to `http://localhost:4000`.
+The API expects `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, and cookie settings in `.env`. The frontend API client uses `VITE_API_URL` and defaults to `http://localhost:4000`. Set `VITE_DATA_MODE=api` to use the API-backed provider.
 
 ## Data Stored in Postgres
 
@@ -46,7 +46,7 @@ The production schema stores:
 ## Validation Completed
 
 - Existing frontend tests cover app workflows, personalization logic, reporting behavior, and game-engine smoke coverage.
-- Backend API tests cover authentication, authorization, child creation, assignment access restrictions, result recording, and audit creation.
+- Backend API tests cover authentication, authorization, child creation, caregiver creation, caregiver reset restrictions, goal creation/status updates, parent-scoped assignment access, caregiver family sessions, result recording restrictions, and audit creation.
 - API TypeScript type-checking runs with `npm run typecheck:server`.
 - Production build runs with `npm run build`.
 - Linting runs with `npm run lint`.

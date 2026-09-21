@@ -4,6 +4,8 @@
 @tailwind components;
 @tailwind utilities;
 
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
 @layer base {
   :root {
     --background: 40 33% 96%;
@@ -78,4 +80,302 @@
   .touch-target {
     @apply min-h-[48px] min-w-[48px];
   }
+
+  .game-mark {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .game-mark-sm {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .game-mark-md {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .game-mark-lg {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  .game-mark-xl {
+    width: 5.5rem;
+    height: 5.5rem;
+    margin-inline: auto;
+  }
+
+  .game-mark .froebel-object {
+    scale: 0.42;
+  }
+
+  .game-mark-sm .froebel-object {
+    scale: 0.36;
+  }
+
+  .game-mark-lg .froebel-object {
+    scale: 0.58;
+  }
+
+  .game-mark-xl .froebel-object {
+    scale: 1.08;
+  }
+
+  .froebel-stage {
+    perspective: 1200px;
+  }
+
+  .froebel-model-shelf {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+    gap: 0.75rem;
+    transform-style: preserve-3d;
+  }
+
+  .froebel-model-cell {
+    min-height: 108px;
+    display: grid;
+    place-items: center;
+    border-radius: 1.25rem;
+    background: linear-gradient(145deg, rgba(255,255,255,0.72), rgba(255,255,255,0.28));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.72), 0 16px 30px rgba(24,54,65,0.12);
+  }
+
+  .froebel-board {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: 1.5rem;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,0.12) 1px, transparent 1px),
+      linear-gradient(rgba(255,255,255,0.12) 1px, transparent 1px),
+      radial-gradient(circle at 20% 15%, rgba(255,255,255,0.25), transparent 32%),
+      linear-gradient(145deg, #b98b5f, #7b5436);
+    background-size: 32px 32px, 32px 32px, auto, auto;
+    box-shadow: inset 0 3px 10px rgba(255,255,255,0.18), inset 0 -16px 30px rgba(63,35,20,0.3);
+    transform: rotateX(6deg);
+    transform-style: preserve-3d;
+  }
+
+  .froebel-slot {
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1.4rem;
+    border: 1px solid rgba(69, 42, 20, 0.18);
+    background: rgba(255, 246, 222, 0.52);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.65), 0 18px 32px rgba(48, 30, 18, 0.14);
+  }
+
+  .froebel-slot-current {
+    outline: 3px solid rgba(245, 158, 11, 0.55);
+    background: rgba(255, 250, 220, 0.82);
+  }
+
+  .froebel-piece-button {
+    display: flex;
+    min-height: 154px;
+    transform-style: preserve-3d;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1.4rem;
+    border: 1px solid hsl(var(--border));
+    background: linear-gradient(145deg, rgba(255,255,255,0.92), rgba(239,230,210,0.74));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 20px 42px rgba(65, 51, 33, 0.12);
+    transition: border-color 180ms ease, box-shadow 180ms ease;
+  }
+
+  .froebel-piece-button:hover {
+    border-color: hsl(var(--primary));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 26px 58px rgba(65, 51, 33, 0.18);
+  }
+
+  .froebel-object {
+    position: relative;
+    width: 62px;
+    height: 62px;
+    display: grid;
+    place-items: center;
+    transform-style: preserve-3d;
+    color: rgba(53, 36, 20, 0.82);
+    filter: drop-shadow(0 18px 16px rgba(48, 34, 20, 0.22));
+  }
+
+  .froebel-object-active {
+    animation: froebelSettle 520ms cubic-bezier(.2,.9,.25,1.15);
+  }
+
+  .froebel-cube {
+    border-radius: 13px;
+    background: linear-gradient(145deg, #f7c56b 0%, #d98d38 48%, #9d5e28 100%);
+    box-shadow: inset -14px -12px 0 rgba(80,39,12,0.2), inset 10px 9px 0 rgba(255,255,255,0.28);
+    transform: rotateX(58deg) rotateZ(45deg);
+  }
+
+  .froebel-sphere {
+    border-radius: 999px;
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255,255,255,0.92), rgba(255,255,255,0.2) 18%, transparent 26%),
+      radial-gradient(circle at 62% 70%, #448e7b, #1f6f66 62%, #164a47);
+  }
+
+  .froebel-column {
+    width: 50px;
+    height: 76px;
+    border-radius: 999px / 24px;
+    background: linear-gradient(90deg, #c96f50, #efae75 34%, #a94e3d 72%, #6f2f2c);
+    box-shadow: inset 0 10px 0 rgba(255,255,255,0.26), inset 0 -12px 0 rgba(61,24,20,0.22);
+  }
+
+  .froebel-prism {
+    width: 0;
+    height: 0;
+    border-left: 38px solid transparent;
+    border-right: 38px solid transparent;
+    border-bottom: 68px solid #5aa6c8;
+    filter: drop-shadow(0 18px 14px rgba(22,64,84,0.25));
+  }
+
+  .froebel-plank {
+    width: 92px;
+    height: 34px;
+    border-radius: 12px;
+    background: linear-gradient(145deg, #d7a15f, #9f6737);
+    box-shadow: inset 0 8px 0 rgba(255,255,255,0.22), inset 0 -9px 0 rgba(65,35,16,0.2);
+    transform: rotateX(52deg) rotateZ(-8deg);
+  }
+
+  .froebel-arch {
+    width: 76px;
+    height: 62px;
+    border-radius: 42px 42px 12px 12px;
+    border: 16px solid #7d8cc4;
+    border-bottom-width: 12px;
+    background: transparent;
+  }
+
+  .froebel-diamond {
+    border-radius: 12px;
+    background: linear-gradient(145deg, #9bd36b, #4f9b55);
+    transform: rotate(45deg) rotateX(30deg);
+  }
+
+  .froebel-wedge {
+    width: 78px;
+    height: 44px;
+    clip-path: polygon(0 100%, 100% 100%, 100% 0);
+    background: linear-gradient(145deg, #f4dd63, #c99024);
+  }
+
+  .froebel-cross {
+    background:
+      linear-gradient(90deg, transparent 34%, #ce6b80 34% 66%, transparent 66%),
+      linear-gradient(transparent 34%, #ce6b80 34% 66%, transparent 66%);
+    border-radius: 10px;
+  }
+
+  .froebel-letter {
+    border-radius: 18px;
+    background: linear-gradient(145deg, #f7f0df, #c8bda5);
+    border: 2px solid rgba(83, 63, 39, 0.18);
+  }
+
+  .playground-3d-scene {
+    position: relative;
+    min-height: 320px;
+    overflow: hidden;
+    border-radius: 2rem;
+    border: 1px solid rgba(30, 89, 67, 0.12);
+    background:
+      radial-gradient(circle at 18% 12%, rgba(255,255,255,0.85), transparent 22%),
+      linear-gradient(180deg, rgba(192,226,232,0.9) 0%, rgba(231,222,183,0.82) 48%, rgba(124,164,112,0.72) 100%);
+    perspective: 1100px;
+    box-shadow: 0 26px 80px rgba(40, 74, 55, 0.16);
+  }
+
+  .playground-horizon {
+    position: absolute;
+    inset: 34% -10% auto;
+    height: 90px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.36);
+    filter: blur(10px);
+  }
+
+  .playground-grid-floor {
+    position: absolute;
+    inset: 35% 5% 8%;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(72px, 1fr));
+    gap: 1rem;
+    align-items: end;
+    transform: rotateX(58deg);
+    transform-origin: center bottom;
+    padding: 1rem;
+    border-radius: 2rem;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,0.22) 1px, transparent 1px),
+      linear-gradient(rgba(255,255,255,0.22) 1px, transparent 1px),
+      rgba(85, 128, 80, 0.24);
+    background-size: 36px 36px;
+  }
+
+  .playground-step-card {
+    min-height: 142px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1.35rem;
+    background: rgba(255, 247, 225, 0.84);
+    border: 1px solid rgba(53, 86, 47, 0.14);
+    box-shadow: 0 24px 34px rgba(31, 67, 42, 0.16);
+    transform-style: preserve-3d;
+  }
+
+  .playground-step-current {
+    background: rgba(255, 255, 238, 0.96);
+    outline: 3px solid rgba(34, 156, 128, 0.35);
+  }
+
+  .playground-step-done {
+    background: rgba(214, 239, 202, 0.86);
+  }
+
+  @media (max-width: 640px) {
+    .playground-3d-scene {
+      min-height: 318px;
+    }
+
+    .playground-grid-floor {
+      inset: 40% 9% 10%;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.35rem;
+      padding: 0.65rem;
+    }
+
+    .playground-step-card {
+      min-height: 112px;
+      border-radius: 1rem;
+    }
+
+    .playground-step-card .froebel-object {
+      scale: 0.68;
+    }
+  }
+
+  @keyframes froebelSettle {
+    0% { transform: translateY(-20px) rotateX(70deg) rotateZ(35deg) scale(0.82); }
+    70% { transform: translateY(3px) rotateX(52deg) rotateZ(43deg) scale(1.04); }
+    100% { transform: translateY(0) rotateX(58deg) rotateZ(45deg) scale(1); }
+  }
 }
+

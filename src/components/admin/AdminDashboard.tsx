@@ -2,18 +2,20 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
+import { PersonIcon } from "@/components/icons/AppIcon";
 
-type Tab = "overview" | "staff" | "families" | "readiness";
+type Tab = "overview" | "caseload" | "staff" | "families" | "readiness";
 
 const tabs: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
+  { key: "caseload", label: "Caseloads" },
   { key: "staff", label: "Staff" },
   { key: "families", label: "Families" },
   { key: "readiness", label: "Readiness" },
 ];
 
 export default function AdminDashboard() {
-  const { setRole, session, signInAdmin, signOut, adminUsers, therapistUsers, addStaffUser, children, assignments, issueFamilyInvite, resetFamilyCredentials, auditLog } = useApp();
+  const { setRole, session, signInAdmin, signOut, adminUsers, therapistUsers, addStaffUser, children, assignments, issueFamilyInvite, resetFamilyCredentials, auditLog, assignChildToTherapist } = useApp();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("overview");
   const [email, setEmail] = useState(adminUsers[0]?.email || "admin@playgroundlife.app");
@@ -63,12 +65,16 @@ export default function AdminDashboard() {
               className="space-y-4"
               onSubmit={(event) => {
                 event.preventDefault();
+                const handleResult = (authenticated: boolean) => {
+                  if (!authenticated) {
+                    setError("We couldn't sign you in. Check the admin email and password.");
+                    return;
+                  }
+                  setError("");
+                };
                 const authenticated = signInAdmin(email, password);
-                if (!authenticated) {
-                  setError("We couldn't sign you in. Check the admin email and password.");
-                  return;
-                }
-                setError("");
+                if (authenticated instanceof Promise) authenticated.then(handleResult);
+                else handleResult(authenticated);
               }}
             >
               <div className="space-y-2">
@@ -184,6 +190,64 @@ export default function AdminDashboard() {
                   <p>{auditLog.length < 10 ? "Audit activity is still light, which is expected in demo data." : "Audit history is being captured consistently for sign-ins and assignment changes."}</p>
                 </div>
               </div>
+            </div>
+          </div>
+        ) : null}
+
+        {tab === "caseload" ? (
+          <div className="space-y-5">
+            <div className="rounded-2xl bg-muted p-4">
+              <h2 className="font-display text-lg font-bold text-foreground">Caseload Manager</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Assign each child to a therapist. Changes are audit-logged.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {therapistUsers.map((therapist) => {
+                  const load = children.filter((child) => child.assignedTherapistId === therapist.id).length;
+                  return (
+                    <span key={therapist.id} className="rounded-full bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm">
+                      {therapist.name} · {load} kid{load === 1 ? "" : "s"}
+                    </span>
+                  );
+                })}
+                <span className="rounded-full bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground shadow-sm">
+                  Unassigned · {children.filter((child) => !child.assignedTherapistId).length}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-2">
+              {children.map((child) => {
+                const activeGoals = child.therapyGoals.filter((goal) => goal.status !== "paused").length;
+                return (
+                  <motion.div
+                    key={child.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="rounded-2xl border border-border bg-card p-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <PersonIcon label={child.name} avatar={child.avatar} size="md" />
+                      <div className="min-w-0">
+                        <p className="truncate font-display font-bold text-foreground">{child.name}</p>
+                        <p className="text-[11px] text-muted-foreground">Age {child.age} · {activeGoals} active goal{activeGoals === 1 ? "" : "s"}</p>
+                      </div>
+                    </div>
+                    <label className="mt-3 block text-xs font-semibold text-muted-foreground" htmlFor={`caseload-${child.id}`}>
+                      Therapist
+                    </label>
+                    <select
+                      id={`caseload-${child.id}`}
+                      value={child.assignedTherapistId || ""}
+                      onChange={(event) => assignChildToTherapist(child.id, event.target.value || null)}
+                      className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    >
+                      <option value="">— Unassigned —</option>
+                      {therapistUsers.map((therapist) => (
+                        <option key={therapist.id} value={therapist.id}>{therapist.name}</option>
+                      ))}
+                    </select>
+                  </motion.div>
+                );
+              })}
             </div>
           </div>
         ) : null}

@@ -4,14 +4,17 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
 import { getGameById } from "@/data/games";
 import GamePlayer from "../game/GamePlayer";
+import StickerBook from "../game/StickerBook";
+import FamilyProgress from "./FamilyProgress";
 import { getPersonalizationSummary } from "@/lib/personalization";
+import { GameIcon, PersonIcon } from "@/components/icons/AppIcon";
 
 export default function ParentDashboard() {
   const { setRole, children, assignments, selectedChildId, setSelectedChildId, currentAssignment, setCurrentAssignment, signInFamily, signOut, session } = useApp();
   const navigate = useNavigate();
   const [playingGameId, setPlayingGameId] = useState<string | null>(null);
   const [signedInFamilyMemberId, setSignedInFamilyMemberId] = useState<string | null>(null);
-  const [familyView, setFamilyView] = useState<"today" | "all" | "completed">("today");
+  const [familyView, setFamilyView] = useState<"today" | "classwork" | "homework" | "all" | "completed">("today");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [signInError, setSignInError] = useState("");
@@ -39,6 +42,14 @@ export default function ParentDashboard() {
   const completedAssignments = useMemo(
     () => childAssignments.filter((assignment) => assignment.status === "completed"),
     [childAssignments]
+  );
+  const classworkAssignments = useMemo(
+    () => pendingAssignments.filter((assignment) => assignment.type === "classwork"),
+    [pendingAssignments]
+  );
+  const homeworkAssignments = useMemo(
+    () => pendingAssignments.filter((assignment) => assignment.type === "homework"),
+    [pendingAssignments]
   );
   const nextAssignment = useMemo(
     () =>
@@ -96,16 +107,19 @@ export default function ParentDashboard() {
                 event.preventDefault();
 
                 const normalizedPhoneNumber = phoneNumber.replace(/\D/g, "");
+                const handleResult = (match: { childId: string; familyMemberId: string } | null) => {
+                  if (!match) {
+                    setSignInError("We couldn't sign you in. Check the phone number and password and try again.");
+                    return;
+                  }
+
+                  setSignInError("");
+                  setSignedInFamilyMemberId(match.familyMemberId);
+                  setSelectedChildId(match.childId);
+                };
                 const match = signInFamily(normalizedPhoneNumber, password);
-
-                if (!match) {
-                  setSignInError("We couldn't sign you in. Check the phone number and password and try again.");
-                  return;
-                }
-
-                setSignInError("");
-                setSignedInFamilyMemberId(match.familyMemberId);
-                setSelectedChildId(match.childId);
+                if (match instanceof Promise) match.then(handleResult);
+                else handleResult(match);
               }}
             >
               <div className="space-y-2">
@@ -186,36 +200,48 @@ export default function ParentDashboard() {
       <header className="flex items-center justify-between border-b border-border bg-card/85 px-4 py-4 backdrop-blur-md sm:px-6">
         <div className="flex items-center gap-3">
           <button onClick={resetFamilySession} className="touch-target text-sm text-muted-foreground hover:text-foreground">
-            Back
+            Switch child
           </button>
-          <span className="text-2xl">{child?.avatar}</span>
+          {child ? <PersonIcon label={child.name} avatar={child.avatar} size="md" /> : null}
           <div>
             <h1 className="font-display text-xl font-bold text-foreground">{child?.name}&apos;s Activities</h1>
             {signedInFamilyMember ? (
               <p className="text-xs text-muted-foreground">
-                Signed in as {signedInFamilyMember.avatar} {signedInFamilyMember.name}
+                Signed in as {signedInFamilyMember.name}
               </p>
             ) : child?.familyMembers && child.familyMembers.length > 0 ? (
               <p className="text-xs text-muted-foreground">
-                Family: {child.familyMembers.map((familyMember) => `${familyMember.avatar} ${familyMember.name}`).join(" - ")}
+                Family: {child.familyMembers.map((familyMember) => familyMember.name).join(" - ")}
               </p>
             ) : null}
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            signOut();
-            resetFamilySession();
-            navigate("/");
-          }}
-          className="touch-target px-3 text-sm text-muted-foreground hover:text-foreground"
-        >
-          Exit
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => navigate("/how-it-works")}
+            className="touch-target rounded-full bg-muted px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:text-foreground"
+          >
+            ? Guide
+          </button>
+          <button
+            onClick={() => {
+              signOut();
+              resetFamilySession();
+              navigate("/");
+            }}
+            className="touch-target px-3 text-sm text-muted-foreground hover:text-foreground"
+          >
+            Exit
+          </button>
+        </div>
       </header>
 
       <div className="mx-auto max-w-3xl p-4 sm:p-6">
+        {child ? <StickerBook childId={child.id} childName={child.name} /> : null}
+        {childAssignments.length > 0 ? (
+          <FamilyProgress results={childAssignments.flatMap((a) => a.results)} />
+        ) : null}
         {personalizationSummary ? (
           <div className="mb-6 rounded-2xl border border-primary/15 bg-primary/5 p-4">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Personalized Journey</p>
@@ -298,9 +324,24 @@ export default function ParentDashboard() {
           </div>
         ) : null}
 
+        {classworkAssignments.length > 0 ? (
+          <div className="mb-6 rounded-2xl border border-accent/30 bg-accent/10 p-5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-foreground">Classwork access</p>
+            <h2 className="mt-1 font-display text-xl font-bold text-foreground">Clinic games are ready here too</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Kids access classwork by signing into this Family portal with their caregiver credentials. Classwork appears in its own tab below and can be played on a clinic tablet, therapy-room computer, or at home if the therapist assigns it.
+            </p>
+            <button onClick={() => setFamilyView("classwork")} className="mt-4 touch-target rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground">
+              Open classwork
+            </button>
+          </div>
+        ) : null}
+
         <div className="mb-6 flex flex-wrap gap-2">
           {([
             ["today", "Today"],
+            ["classwork", "Classwork"],
+            ["homework", "Homework"],
             ["all", "All To Do"],
             ["completed", "Completed"],
           ] as const).map(([key, label]) => (
@@ -318,7 +359,13 @@ export default function ParentDashboard() {
           <div className="mb-8">
             <h2 className="mb-4 font-display text-lg font-bold text-foreground">{familyView === "today" ? "Today" : "To Do"}</h2>
             <div className="space-y-4">
-              {(familyView === "today" && nextAssignment ? [nextAssignment] : pendingAssignments).map((assignment) => {
+              {(familyView === "today" && nextAssignment
+                ? [nextAssignment]
+                : familyView === "classwork"
+                  ? classworkAssignments
+                  : familyView === "homework"
+                    ? homeworkAssignments
+                    : pendingAssignments).map((assignment) => {
                 const progress = assignment.gameIds.length > 0 ? Math.round((assignment.completedGames.length / assignment.gameIds.length) * 100) : 0;
                 const assignedFamilyMember = assignment.assignedFamilyMemberId
                   ? child?.familyMembers.find((familyMember) => familyMember.id === assignment.assignedFamilyMemberId)
@@ -340,7 +387,7 @@ export default function ParentDashboard() {
                         ) : null}
                         {assignedFamilyMember ? (
                           <p className="mt-1 text-xs font-semibold text-primary">
-                            Assigned to: {assignedFamilyMember.avatar} {assignedFamilyMember.name}
+                            Assigned to: {assignedFamilyMember.name}
                           </p>
                         ) : null}
                       </div>
@@ -405,7 +452,7 @@ export default function ParentDashboard() {
                               done ? "bg-secondary/10 border-secondary/30 opacity-60" : "border-border bg-card hover:border-primary hover:shadow-md"
                             }`}
                           >
-                            <span className="text-3xl">{game?.emoji || "?"}</span>
+                            <GameIcon game={game} size="lg" />
                             <div className="flex-1 text-left">
                               <p className="text-sm font-bold text-foreground">{game?.name || gameId}</p>
                               <p className="text-xs text-muted-foreground">{game?.estimatedMinutes || 5} min</p>
@@ -423,7 +470,7 @@ export default function ParentDashboard() {
           </div>
         ) : (
           <div className="py-12 text-center">
-            <div className="mb-4 text-6xl animate-bounce-gentle">Done</div>
+            <div className="mx-auto mb-4 grid h-16 w-16 animate-bounce-gentle place-items-center rounded-3xl bg-secondary/15 text-2xl font-black text-secondary">OK</div>
             <h2 className="mb-2 font-display text-2xl font-bold text-foreground">All Done!</h2>
             <p className="text-muted-foreground">No homework pending. Great job!</p>
           </div>
@@ -441,7 +488,10 @@ export default function ParentDashboard() {
                         const game = getGameById(gameId);
                         return (
                           <span key={gameId} className="rounded-full bg-secondary/20 px-2 py-1 text-xs text-foreground">
-                            {game?.emoji} {game?.name}
+                            <span className="inline-flex items-center gap-2">
+                              <GameIcon game={game} size="sm" />
+                              {game?.name}
+                            </span>
                           </span>
                         );
                       })}

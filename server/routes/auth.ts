@@ -5,6 +5,7 @@ import { config, isProduction } from "../config.ts";
 import { query } from "../db.ts";
 import { requireAuth, requireRole } from "../middleware.ts";
 import { writeAudit } from "../audit.ts";
+import { verifyTotp } from "../lib/compliance.ts";
 import type { UserRole } from "../types.ts";
 
 interface UserRow {
@@ -14,6 +15,8 @@ interface UserRow {
   name: string;
   password_hash: string;
   credential_status: string;
+  mfa_enabled?: boolean;
+  mfa_secret?: string | null;
 }
 
 const router = Router();
@@ -21,6 +24,7 @@ const router = Router();
 const loginSchema = z.object({
   identifier: z.string().min(1),
   password: z.string().min(1),
+  mfa_token: z.string().length(6).optional(),
 });
 
 const createStaffSchema = z.object({
@@ -46,7 +50,7 @@ router.post("/login", async (req, res) => {
   const identifier = parsed.data.identifier.trim();
   const normalizedPhone = identifier.replace(/\D/g, "");
   const result = await query<UserRow>(
-    `SELECT id, clinic_id, role, name, password_hash, credential_status
+    `SELECT id, clinic_id, role, name, password_hash, credential_status, mfa_enabled, mfa_secret
      FROM users
      WHERE lower(email) = lower($1)
         OR regexp_replace(coalesce(phone_number, ''), '\\D', '', 'g') = $2
@@ -57,6 +61,15 @@ router.post("/login", async (req, res) => {
   const user = result.rows[0];
   if (!user || user.credential_status !== "active" || !(await verifyPassword(user.password_hash, parsed.data.password))) {
     return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  if (user.mfa_enabled && user.mfa_secret) {
+    if (!parsed.data.mfa_token) {
+      return res.status(401).json({ error: "mfa_required", message: "Enter the 6-digit code from your authenticator app." });
+    }
+    if (!verifyTotp(user.mfa_secret, parsed.data.mfa_token)) {
+      return res.status(401).json({ error: "mfa_invalid", message: "That code did not match. Try the next one." });
+    }
   }
 
   await query("UPDATE users SET last_signed_in_at = now(), updated_at = now() WHERE id = $1", [user.id]);
